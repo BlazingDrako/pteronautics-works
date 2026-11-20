@@ -107,7 +107,7 @@ function sidebar() {
     live ? h('a', { class: 'nav-item', href: `#/v/${live.id}/requirements`, title: `The requirements of ${live.name}` }, icon('list'), h('span', {}, 'Requirements')) : planned('list', 'Requirements'),
     live ? h('a', { class: 'nav-item', href: `#/v/${live.id}/trade`, title: `Trade studies on ${live.name}` }, icon('bars'), h('span', {}, 'Trade studies')) : planned('bars', 'Trade studies'),
     h('div', { class: 'nav-group' }, 'Libraries'),
-    planned('airfoil', 'Airfoils'), planned('motor', 'Engines & motors'), planned('grid', 'Materials'), planned('cell', 'Propellants & cells'),
+    ...[['airfoils', 'airfoil', 'Airfoils'], ['motors', 'motor', 'Engines & motors'], ['materials', 'grid', 'Materials'], ['cells', 'cell', 'Propellants & cells']].map(([tab, ic, label]) => h('a', { class: 'nav-item', href: `#/library/${tab}${live ? '?v=' + live.id : ''}` }, icon(ic), h('span', {}, label))),
     h('div', { class: 'nav-group' }, 'Output'),
     live ? h('a', { class: 'nav-item', href: `#/v/${live.id}/report`, title: `The design report of ${live.name}` }, icon('doc'), h('span', {}, 'Reports')) : planned('doc', 'Reports'),
     h('div', { class: 'sidebar-foot' }, themeButton(), h('div', { class: 'sidebar-credit' }, 'Made by Andrew Aguiar · ', h('a', { href: 'https://blazingdrako.github.io/pteronautics/' }, 'Pteronautics'))));

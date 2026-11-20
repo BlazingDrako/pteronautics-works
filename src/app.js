@@ -6,6 +6,7 @@
 //   #/v/<id>/requirements  the requirements of vehicle <id>, editable, with their history
 //   #/v/<id>/report  a printable design report of vehicle <id>
 //   #/v/<id>/compare  two designs of vehicle <id> side by side (current, seed, snapshots)
+//   #/library/<tab>?v=<id>  part libraries (airfoils, motors, cells, materials), applied to vehicle <id>
 import { initTheme, h } from './ui/dom.js';
 import { renderHangar, opensWorkspace } from './ui/hangar.js';
 import { renderWorkspace } from './ui/workspace.js';
@@ -15,6 +16,7 @@ import { renderMission } from './ui/mission.js';
 import { renderRequirements } from './ui/requirements.js';
 import { renderReport } from './ui/report.js';
 import { renderCompare } from './ui/compare.js';
+import { renderLibrary } from './ui/library.js';
 import { loadVehicle } from './model/store.js';
 import { VEHICLE_CLASSES } from './model/vehicle.js';
 
@@ -24,6 +26,8 @@ const root = document.getElementById('app');
 function route() {
   const m = location.hash.match(/^#\/v\/([a-z0-9-]+)(\/trade|\/mission|\/requirements|\/report|\/compare)?/);
   window.scrollTo(0, 0);
+  const lib = location.hash.match(/^#\/library(?:\/([a-z]+))?(?:\?v=([a-z0-9-]+))?/);
+  if (lib) { document.title = 'Libraries · Pteronautics Works'; return renderLibrary(root, lib[1], lib[2]); }
   if (!m) { document.title = 'Pteronautics Works'; return renderHangar(root); }
   const doc = loadVehicle(m[1]);
   if (!doc || !opensWorkspace(doc)) {

@@ -191,6 +191,8 @@ export function renderWorkspace(root, doc) {
       return h('div', { class: 'field' }, h('div', { class: 'field-top' }, h('label', {}, p.label), inp));
     });
     const derived = h('div', { class: 'derived-box' });
+    const libTab = { wing: 'airfoils', battery: 'cells', propulsor: 'motors' }[comp.type];
+    if (libTab) fields.push(h('p', { class: 'note', style: { margin: '2px 0 8px' } }, h('a', { href: `#/library/${libTab}?v=${doc.id}` }, comp.type === 'wing' ? 'Pick sections or construction from the library →' : comp.type === 'battery' ? 'Pick cells from the library →' : 'Pick a motor class from the library →')));
     editor.replaceChildren(h('div', { class: 'sec-row' }, h('span', { class: 'sec' }, comp.name), h('span', { class: 'muted', style: { fontSize: '12px' } }, T.label)), ...fields, derived);
     editor._derived = { box: derived, comp }; editor._fields = setters;
     paintDerived();
