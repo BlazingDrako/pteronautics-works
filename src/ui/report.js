@@ -35,7 +35,7 @@ export function renderReport(root, doc) {
   function paint() {
     const o = {}; for (const id of graph.order) o[id] = graph.outputs(id);
     const failed = graph.order.filter(id => graph.state.get(id).state === 'failed');
-    const g = o.geometry, ae = o.aero, m = o.mass, st = o.stability, p = o.performance, ms = o.mission, rq = o.requirements;
+    const g = o.geometry, ae = o.aero, m = o.mass, st = o.stability, p = o.performance, ms = o.mission, rq = o.requirements, gl = o.glide;
     const date = new Date();
     const sec = (n, title, ...body) => h('section', { class: 'rp-sec' }, h('h2', {}, h('span', { class: 'rp-n' }, n), title), ...body);
     const kv = rows => h('dl', { class: 'rp-kv' }, rows.filter(Boolean).map(([k, v]) => h('div', {}, h('dt', {}, k), h('dd', {}, v))));
@@ -45,8 +45,9 @@ export function renderReport(root, doc) {
     // 1 summary
     const fails = rq ? rq.list.filter(r => r.status === 'fail') : [];
     const summary = [
-      `${doc.name} is ${/^[aeiou]/i.test(doc.role || '') ? 'an' : 'a'} ${(r => r.charAt(0).toLowerCase() + r.slice(1))(doc.role || VEHICLE_CLASSES[doc.class]?.label || 'vehicle')}`,
+      `${doc.name} is ${/^([aeiou]|8|11\b|18\b|80)/i.test(doc.role || '') ? 'an' : 'a'} ${(r => r.charAt(0).toLowerCase() + r.slice(1))(doc.role || VEHICLE_CLASSES[doc.class]?.label || 'vehicle')}`,
       m && g ? ` of ${fx(m.total, 2)} kg takeoff mass and ${fx(g.span, 2)} m span (aspect ratio ${fx(g.AR, 1)}).` : '.',
+      gl ? ` It glides at ${fx(gl.LDmax, 1)} to 1 at ${fx(gl.Vmd * 3.6, 0)} km/h, sinks ${fx(gl.minSink, 2)} m/s at best, and averages ${fx(gl.xcSpeed, 0)} km/h across country in ${fx(gl.Wc, 1)} m/s thermals.` : '',
       p ? ` It stalls at ${fx(p.Vs, 1)} m/s, reaches a lift-to-drag ratio of ${fx(p.LDmax, 1)}, and flies for ${fx(p.endurance, 0)} min at its best-endurance speed.` : '',
       ms && isFinite(ms.margin) ? ` Its ${ms.segments.length}-segment mission takes ${fx(ms.duration, 0)} min and leaves ${fx(ms.margin, 1)}% of usable energy after the reserve.` : ms ? ' Its mission cannot be flown as planned.' : '',
       rq ? ` It meets ${rq.met} of ${rq.total} requirements${fails.length ? `; ${fails.map(r => r.id).join(', ')} ${fails.length === 1 ? 'fails' : 'fail'}` : ''}${rq.marginal ? `, ${rq.marginal} marginal` : ''}.` : '',
@@ -61,6 +62,7 @@ export function renderReport(root, doc) {
 
     parts.push(sec(1, 'Summary', h('p', {}, summary),
       kv([m && ['Takeoff mass', `${fx(m.total, 2)} kg`], g && ['Span · area', `${fx(g.span, 2)} m · ${fx(g.S, 3)} m²`], p && ['Stall speed (1 g)', `${fx(p.Vs, 1)} m/s`], p && ['Max L/D', fx(p.LDmax, 1)],
+        gl && ['Best glide', `${fx(gl.LDmax, 1)} @ ${fx(gl.Vmd * 3.6, 0)} km/h`], gl && ['Minimum sink', `${fx(gl.minSink, 2)} m/s`], gl && ['Cross-country speed', `${fx(gl.xcSpeed, 0)} km/h`],
         p && ['Endurance (best)', `${fx(p.endurance, 0)} min @ ${fx(p.Vend, 1)} m/s`], p && ['Range (best)', `${fx(p.range, 0)} km @ ${fx(p.Vrange, 1)} m/s`], st && ['Static margin', `${minus(fx(st.SM, 1))}% MAC`],
         ms && ['Mission margin', isFinite(ms.margin) ? `${fx(ms.margin, 1)}% after reserve` : 'cannot be flown']]),
       g ? fig(1, `${doc.name} top view to scale, with the span load at cruise trim, the mean aerodynamic chord, the CG and the neutral point.`, (() => { try { return vehicleView(doc, o, { clmap: true, load: true, mac: true, cg: true, items: false }, { w: 760, h: 470 }).svg; } catch { return h('p', {}, 'Top view not available.'); } })()) : null));
@@ -108,6 +110,16 @@ export function renderReport(root, doc) {
           series: [{ pts: p.curve.map(c => [c.V, c.Pel]), cls: 's-accent' }, { pts: p.curve.map(c => [c.V, c.Preq]), cls: 's-muted' }, { pts: p.curve.map(c => [c.V, c.Pav]), cls: 's-good' }],
           legend: [{ label: 'Battery power', cls: 's-accent' }, { label: 'Power required', cls: 's-muted' }, { label: 'Shaft power available', cls: 's-good' }],
           marks: [{ x: p.Vs, label: 'stall', cls: 's-warn' }, { x: p.Vend, label: 'best endurance', cls: 's-warn', row: 1 }, { x: p.cruise.V, label: 'cruise', cls: 's-hl', row: 2, color: 'var(--hl)' }] }))));
+    }
+
+    // 6 glide (sailplanes)
+    if (gl) {
+      const xs = gl.curve.map(c => c.V);
+      parts.push(sec(6, 'Glide and cross-country', h('p', {}, 'The parabolic drag polar at the flight weight and altitude, and MacCready\'s speed to fly between thermals. The drag is a fully turbulent handbook build-up, the pessimistic bound.'),
+        kv([['Best glide', `${fx(gl.LDmax, 1)} @ ${fx(gl.Vmd * 3.6, 0)} km/h`], ['Minimum sink', `${fx(gl.minSink, 2)} m/s @ ${fx(gl.Vms * 3.6, 0)} km/h`], ['Stall (1 g)', `${fx(gl.Vs * 3.6, 0)} km/h`], ['Wing loading', `${fx(gl.wingLoading, 1)} kg/m²`]]),
+        fig(3, `Glide polar (sink rate against airspeed) with the MacCready tangent for ${fx(gl.Wc, 1)} m/s climbs.`, chart({ w: 720, h: 250, x: [0, Math.max(...xs)], y: [-Math.min(Math.max(...gl.curve.map(c => c.sink)), gl.minSink * 6), gl.Wc * 1.15], xLabel: 'Airspeed (m/s)', yLabel: 'Vertical speed (m/s)',
+          series: [{ pts: gl.curve.map(c => [c.V, -c.sink]), cls: 's-accent' }, { pts: [[0, gl.Wc], [gl.xc.V, -gl.xc.sink]], cls: 's-hl' }, { pts: [[0, 0], [Math.max(...xs), 0]], cls: 's-muted' }] })),
+        table(['Thermal climb', 'Speed to fly', 'Cross-country speed'], gl.mc.map(r => [`${fx(r.Wc, 1)} m/s`, `${fx(r.V * 3.6, 0)} km/h`, `${fx(r.Vxc * 3.6, 1)} km/h`]), 'rp-num')));
     }
 
     // 7 mission

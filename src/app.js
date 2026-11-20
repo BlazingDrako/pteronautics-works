@@ -34,7 +34,7 @@ function route() {
   if (m[2] === '/trade' && live) { document.title = `${doc.name} trade study · Pteronautics Works`; return renderTrade(root, doc); }
   if (m[2] === '/report' && live) { document.title = `${doc.name} report · Pteronautics Works`; return renderReport(root, doc); }
   if (m[2] === '/requirements' && live) { document.title = `${doc.name} requirements · Pteronautics Works`; return renderRequirements(root, doc); }
-  if (m[2] === '/mission' && live) { document.title = `${doc.name} mission · Pteronautics Works`; return renderMission(root, doc); }
+  if (m[2] === '/mission' && doc.class === 'fixed-wing') { document.title = `${doc.name} mission · Pteronautics Works`; return renderMission(root, doc); }
   document.title = `${doc.name} · Pteronautics Works`;
   if (live) renderWorkspace(root, doc);
   else renderLauncher(root, doc);

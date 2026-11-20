@@ -87,7 +87,7 @@ export const VEHICLE_CLASSES = {
   'high-speed': { label: 'High-speed', implemented: false, types: ['fuselage', 'wing', 'htail', 'vtail', 'inlet', 'turbofan', 'payload', 'avionics', 'systems'] },
   'launch-vehicle': { label: 'Launch vehicles', implemented: false, types: ['stage', 'rocketEngine', 'fairing', 'payload', 'avionics', 'systems'] },
   spacecraft: { label: 'Spacecraft', implemented: false, types: ['bus', 'solarArray', 'thruster', 'battery', 'payload', 'avionics'] },
-  sailplane: { label: 'Sailplanes', implemented: false, types: ['fuselage', 'wing', 'htail', 'vtail', 'payload', 'avionics', 'systems'] },
+  sailplane: { label: 'Sailplanes', implemented: true, types: ['fuselage', 'wing', 'htail', 'vtail', 'payload', 'avionics', 'systems'] },
 };
 
 export const REQUIREMENT_OPS = ['>=', '<='];
