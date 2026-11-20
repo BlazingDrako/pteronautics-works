@@ -1,7 +1,7 @@
 // Small SVG line charts that follow the theme.
 import { s } from './dom.js';
 
-const nice = (lo, hi, n = 5) => {
+export const nice = (lo, hi, n = 5) => {
   const span = hi - lo || 1, step0 = span / n, mag = 10 ** Math.floor(Math.log10(step0));
   const step = [1, 2, 2.5, 5, 10].map(k => k * mag).find(st => span / st <= n) || 10 * mag;
   const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9 * span; v += step) out.push(+v.toPrecision(10));
@@ -20,6 +20,16 @@ export function chart(o) {
   svg.append(s('path', { d: `M${pad.l},${pad.t} L${pad.l},${h - pad.b} L${w - pad.r},${h - pad.b}`, class: 'ax' }));
   if (o.xLabel) svg.append(s('text', { x: (pad.l + w - pad.r) / 2, y: h - 4, class: 'ax-label', 'text-anchor': 'middle' }, o.xLabel));
   if (o.yLabel) svg.append(s('text', { x: 12, y: (pad.t + h - pad.b) / 2, class: 'ax-label', 'text-anchor': 'middle', transform: `rotate(-90 12 ${(pad.t + h - pad.b) / 2})` }, o.yLabel));
+  // shaded spans: bands [{ x0, x1, cls }] across the plot's height, ybands [{ y0, y1, cls }] across its width
+  const cx = v => Math.max(pad.l, Math.min(w - pad.r, X(v))), cy = v => Math.max(pad.t, Math.min(h - pad.b, Y(v)));
+  for (const b of o.bands || []) { const a = cx(b.x0), c = cx(b.x1); if (c > a) svg.append(s('rect', { x: a, y: pad.t, width: c - a, height: h - pad.b - pad.t, class: b.cls || 'band-good' })); }
+  for (const b of o.ybands || []) { const a = cy(Math.max(b.y0, b.y1)), c = cy(Math.min(b.y0, b.y1)); if (c > a) svg.append(s('rect', { x: pad.l, y: a, width: w - pad.l - pad.r, height: c - a, class: b.cls || 'band-bad' })); }
+  // horizontal reference lines: hlines [{ y, label, cls, color }]
+  for (const L of o.hlines || []) {
+    if (!isFinite(L.y) || L.y < y0 || L.y > y1) continue;
+    svg.append(s('line', { x1: pad.l, x2: w - pad.r, y1: Y(L.y), y2: Y(L.y), class: L.cls || 's-target' }));
+    if (L.label && !compact) svg.append(s('text', { x: w - pad.r - 3, y: Y(L.y) - 4, class: 'ax-ref', 'text-anchor': 'end', style: `fill:${L.color || 'var(--text-2)'}` }, L.label));
+  }
   // points outside the y range break the line rather than being drawn flat along the edge
   const inY = v => v >= y0 - (y1 - y0) * 0.02 && v <= y1 + (y1 - y0) * 0.02, clip = v => Math.max(y0, Math.min(y1, v));
   for (const se of o.series || []) {
@@ -44,6 +54,14 @@ export function chart(o) {
     }
   }
   for (const p of o.points || []) if (isFinite(p.x) && isFinite(p.y)) svg.append(s('circle', { cx: X(p.x), cy: Y(clip(p.y)), r: p.r || 3.5, style: `fill:${p.color || 'var(--accent)'}` }));
+  // onPick(x): a click in the plot reports the x value under it
+  if (o.onPick) {
+    svg.classList.add('pickable');
+    svg.addEventListener('click', e => {
+      const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * w / r.width;
+      o.onPick(x0 + (px - pad.l) / (w - pad.l - pad.r) * (x1 - x0));
+    });
+  }
   return svg;
 }
 const fmt = v => Math.abs(v) >= 1000 ? (v / 1000) + 'k' : String(+v.toPrecision(4));

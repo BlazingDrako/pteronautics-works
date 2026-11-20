@@ -81,11 +81,14 @@ function matrix() {
 }
 
 function sidebar() {
+  // trade studies open on the most recently edited vehicle this build analyses
+  const live = allVehicles().filter(v => VEHICLE_CLASSES[v.class]?.implemented).sort((a, b) => String(b.updated).localeCompare(String(a.updated)))[0];
   const planned = (ic, label) => h('div', { class: 'nav-item planned', title: label + ' (coming in a later slice)' }, icon(ic), h('span', {}, label), h('span', { class: 'soon' }, 'soon'));
   return h('nav', { class: 'sidebar', 'aria-label': 'Works navigation' },
     brand(),
     h('a', { class: 'nav-item active', href: '#/' }, icon('hangar'), h('span', {}, 'Hangar')),
-    planned('mission', 'Missions'), planned('list', 'Requirements'), planned('bars', 'Trade studies'),
+    planned('mission', 'Missions'), planned('list', 'Requirements'),
+    live ? h('a', { class: 'nav-item', href: `#/v/${live.id}/trade`, title: `Trade studies on ${live.name}` }, icon('bars'), h('span', {}, 'Trade studies')) : planned('bars', 'Trade studies'),
     h('div', { class: 'nav-group' }, 'Libraries'),
     planned('airfoil', 'Airfoils'), planned('motor', 'Engines & motors'), planned('grid', 'Materials'), planned('cell', 'Propellants & cells'),
     h('div', { class: 'nav-group' }, 'Output'),

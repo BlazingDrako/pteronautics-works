@@ -56,6 +56,7 @@ export function renderWorkspace(root, doc) {
         h('a', { class: 'vtab', href: '#/v/vireo-2', role: 'tab', 'aria-selected': 'false' }, 'Vireo-2')),
       h('span', { class: 'grow' }),
       revPill,
+      h('a', { class: 'btn small', href: `#/v/${doc.id}/trade`, title: 'Sweep design values through the coupled analyses' }, icon('bars'), 'Trade study'),
       h('button', { class: 'btn small', type: 'button', title: 'Download this vehicle as a .json file', onclick: () => downloadVehicle(doc) }, icon('download'), 'Save .json'),
       h('button', { class: 'btn small', type: 'button', title: 'Replace this vehicle with one from a .json file', onclick: loadFile }, icon('upload'), 'Load .json'),
       isSeed ? h('button', { class: 'btn small', type: 'button', title: 'Discard local edits and go back to the seeded design', onclick: reset }, icon('reset'), 'Reset') : null,
