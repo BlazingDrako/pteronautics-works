@@ -72,7 +72,6 @@ export function concepts() {
     base({
       id: 'tern', name: 'Tern', class: 'sailplane', role: '18 m class sailplane', status: 'active', revision: 6, branch: 'main',
       mission: { altitude: 1200, dT: 0, cruiseSpeed: 28, climbRate: 1.5 },
-      tags: ['NACA 4-digit sections', 'glide polar', 'MacCready'],
       components: [
         C('fuselage', 'fuselage', { name: 'Fuselage & cockpit', length: 6.8, width: 0.62, mass: 115, x: 2.65 }),
         C('wing', 'wing', { name: 'Wing', span: 18, rootChord: 0.9, taper: 0.4, sweep: 0, twist: -1.5, dihedral: 3, rootAirfoil: '2412', tipAirfoil: '2410', x: 2.15, position: 'mid', arealMass: 17 }),
