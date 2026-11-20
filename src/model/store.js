@@ -21,7 +21,24 @@ export function loadVehicle(id) {
 
 export function saveVehicle(doc) {
   const ls = storage(); if (!ls) return false;
-  try { ls.setItem(KEY + doc.id, JSON.stringify(doc)); return true; } catch { return false; }
+  try {
+    ls.setItem(KEY + doc.id, JSON.stringify(doc));
+    if (!seeds().some(v => v.id === doc.id)) { const ids = customIds(); if (!ids.includes(doc.id)) ls.setItem(INDEX, JSON.stringify([...ids, doc.id])); }
+    return true;
+  } catch { return false; }
+}
+
+// ids of vehicles the user added (imported or new), in the order they were added
+const INDEX = 'works-vehicles';
+export function customIds() {
+  const ls = storage();
+  try { const v = JSON.parse(ls && ls.getItem(INDEX) || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string') : []; } catch { return []; }
+}
+export function uniqueId(name) {
+  const base = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'vehicle';
+  const taken = new Set([...seeds().map(v => v.id), ...customIds()]);
+  let id = base, k = 2; while (taken.has(id)) id = `${base}-${k++}`;
+  return id;
 }
 
 export function resetVehicle(id) {
@@ -31,7 +48,7 @@ export function resetVehicle(id) {
 
 export const isModified = id => { const ls = storage(); try { return !!(ls && ls.getItem(KEY + id)); } catch { return false; } };
 
-export const allVehicles = () => seeds().map(s => loadVehicle(s.id) || s);
+export const allVehicles = () => [...seeds().map(s => loadVehicle(s.id) || s), ...customIds().map(loadVehicle).filter(Boolean)];
 
 // Download the document as <id>.json
 export function downloadVehicle(doc) {
