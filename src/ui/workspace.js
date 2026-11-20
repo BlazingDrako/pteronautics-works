@@ -30,6 +30,7 @@ const MISSION_FIELDS = [
 const GLIDER_FIELDS = [
   { key: 'cruiseSpeed', label: 'Trim speed (stability)', unit: 'm/s', min: 10, max: 80, step: 0.5, smin: 18, smax: 50 },
   { key: 'climbRate', label: 'Average thermal climb', unit: 'm/s', min: 0.2, max: 6, step: 0.1, smin: 0.5, smax: 4 },
+  { key: 'ballast', label: 'Water ballast', unit: 'kg', min: 0, max: 300, step: 1, smin: 0, smax: 200 },
   { key: 'altitude', label: 'Altitude (ISA)', unit: 'm', min: 0, max: 8000, step: 10, smin: 0, smax: 4000 },
   { key: 'dT', label: 'ISA deviation', unit: 'K', min: -40, max: 40, step: 1, smin: -30, smax: 30 },
 ];
@@ -353,7 +354,7 @@ export function renderWorkspace(root, doc) {
       h('h3', {}, 'MacCready table'),
       h('div', { class: 'mx-wrap' }, h('table', { class: 'rq' }, h('thead', {}, h('tr', {}, ['Thermal climb', 'Speed to fly', 'Sink at that speed', 'Cross-country speed'].map(t => h('th', {}, t)))),
         h('tbody', {}, gl.mc.map(r => h('tr', {}, h('td', { class: 'num-c' }, `${fx(r.Wc, 1)} m/s`), h('td', { class: 'num-c' }, `${fx(r.V * 3.6, 0)} km/h`), h('td', { class: 'num-c' }, `${fx(r.sink, 2)} m/s`), h('td', { class: 'num-c' }, `${fx(r.Vxc * 3.6, 1)} km/h`)))))),
-      h('div', { class: 'placeholder' }, 'The drag is a fully turbulent handbook build-up, so it is the pessimistic bound: laminar sailplanes reach far higher glide ratios. Choose viscous sections under Fidelity for the free-transition section drag of the wing.'));
+      h('div', { class: 'placeholder' }, `Skin friction is mixed laminar and turbulent, from each part's laminar run (set on the wing, tails and fuselage)${gl.flaps ? '; the camber flaps keep the wing on its least-drag lift between CL 0.15 and 1.1 and add 0.25 to CL,max' : ''}. Water ballast is set in the flight condition.`));
   }
   function airfoilSvg(code, w, hgt, chordPx) {
     const { X, Y } = nacaPanels(code, 120);

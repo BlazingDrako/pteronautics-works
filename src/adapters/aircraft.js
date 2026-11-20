@@ -50,17 +50,28 @@ export function surfaceOf(area, aspect, taper = 0.6) {
 }
 
 // ---------- drag ----------
-// Zero-lift drag by Raymer's component build-up (turbulent skin friction × form factor × wetted area), with 10%
+// Zero-lift drag by Raymer's component build-up (skin friction × form factor × wetted area; turbulent, or mixed where
+// a part has a laminar run `lam`), with 10%
 // for interference, the propeller and the gear. Re per metre from the flight condition.
 const cfTurb = (Re, M) => 0.455 / (Math.log10(Re) ** 2.58 * (1 + 0.144 * M * M) ** 0.65);
+// Laminar flat plate (Blasius)
+const cfLam = Re => 1.328 / Math.sqrt(Re);
+// Mixed flow with laminar flow over the first fraction `lam` of the length (transition at Re_tr = lam·Re): the
+// turbulent plate, less its turbulent first part, plus that part laminar
+//   cf = cf_t(Re) − lam·cf_t(Re_tr) + lam·cf_l(Re_tr)
+export function cfMixed(Re, lam = 0, M = 0) {
+  if (!(lam > 0)) return cfTurb(Re, M);
+  const Rt = Math.max(1e3, lam * Re);
+  return Math.max(cfLam(Re), cfTurb(Re, M) - lam * cfTurb(Rt, M) + lam * cfLam(Rt));
+}
 // `fixed` adds items whose CD is already known (a wing from viscous section polars).
 export function zeroLiftDrag({ S, parts, rePerM, M, fixed = [] }) {
   let sum = 0; const items = [];
   for (const f of fixed) { items.push({ ...f }); sum += f.CD; }
   for (const p of parts) {
-    const Re = Math.max(1e4, rePerM * p.len), cf = cfTurb(Re, M);
+    const Re = Math.max(1e4, rePerM * p.len), cf = cfMixed(Re, p.lam || 0, M);
     const CD = cf * p.FF * p.Q * p.Swet / S;
-    items.push({ name: p.name, CD, Swet: p.Swet, Re, cf, FF: p.FF });
+    items.push({ name: p.name, CD, Swet: p.Swet, Re, cf, FF: p.FF, lam: p.lam || 0 });
     sum += CD;
   }
   const misc = 0.10 * sum;

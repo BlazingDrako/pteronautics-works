@@ -45,7 +45,7 @@ export function fixedWingNodes({ airfoil = null } = {}) {
         return {
           W, P, wing: w, span: P.b, S: W.S, AR: W.AR, mac: P.mac, cr: P.cr, ct: P.ct, xLE: w.x, xMacLE: w.x + P.xMac, yMac: P.yMac,
           sweepLE: P.sweepLE, ht: ht && { ...A.surfaceOf(ht.area, ht.aspect), x: ht.x, comp: ht }, vt: vt && { ...A.surfaceOf(vt.area, vt.aspect, 0.5), x: vt.x, comp: vt },
-          fus: f ? { L: f.length, d: f.width } : { L: 0, d: 0 }, prop: firstOf(doc, 'propulsor'),
+          fus: f ? { L: f.length, d: f.width, lam: f.laminar || 0 } : { L: 0, d: 0, lam: 0 }, prop: firstOf(doc, 'propulsor'),
           root: A.sectionOf(w.rootAirfoil), tip: A.sectionOf(w.tipAirfoil),
         };
       },
@@ -91,10 +91,10 @@ export function fixedWingNodes({ airfoil = null } = {}) {
         // the wing: Raymer's turbulent flat plate × form factor, or the viscous sections' minimum drag over the exposed area
         const fixed = [];
         if (visc) fixed.push({ name: 'Wing (viscous section cd,min)', CD: (sec.root.cdmin + sec.tip.cdmin) / 2 * exposed * Math.cos(g.W.sweep * DEG) ** 0.28 });
-        else parts.push({ name: 'Wing', Swet: 2 * g.S * exposed * (1 + 0.2 * g.root.tc), len: g.mac, FF: A.wingFF(g.root.tc, g.W.sweep), Q: 1 });
-        if (g.ht) parts.push({ name: 'Horizontal tail', Swet: 2.04 * g.ht.S, len: g.ht.mac, FF: A.wingFF(0.10, g.ht.comp.sweep), Q: 1.05 });
-        if (g.vt) parts.push({ name: 'Fin', Swet: 2.04 * g.vt.S, len: g.vt.mac, FF: A.wingFF(0.10, g.vt.comp.sweep), Q: 1.05 });
-        if (f.L > 0) parts.push({ name: 'Fuselage', Swet: 0.8 * Math.PI * f.d * f.L, len: f.L, FF: A.bodyFF(f.L / f.d), Q: 1 });
+        else parts.push({ name: 'Wing', Swet: 2 * g.S * exposed * (1 + 0.2 * g.root.tc), len: g.mac, FF: A.wingFF(g.root.tc, g.W.sweep), Q: 1, lam: g.wing.laminar || 0 });
+        if (g.ht) parts.push({ name: 'Horizontal tail', Swet: 2.04 * g.ht.S, len: g.ht.mac, FF: A.wingFF(0.10, g.ht.comp.sweep), Q: 1.05, lam: g.ht.comp.laminar || 0 });
+        if (g.vt) parts.push({ name: 'Fin', Swet: 2.04 * g.vt.S, len: g.vt.mac, FF: A.wingFF(0.10, g.vt.comp.sweep), Q: 1.05, lam: g.vt.comp.laminar || 0 });
+        if (f.L > 0) parts.push({ name: 'Fuselage', Swet: 0.8 * Math.PI * f.d * f.L, len: f.L, FF: A.bodyFF(f.L / f.d), Q: 1, lam: f.lam });
         const drag = A.zeroLiftDrag({ S: g.S, parts, rePerM, M, fixed });
         return {
           method: lin.method, CLa: lin.CLa, alphaL0: lin.alphaL0, eInv: lin.e, e: A.oswald(lin.e, g.AR, drag.CD0),
@@ -105,13 +105,15 @@ export function fixedWingNodes({ airfoil = null } = {}) {
     },
     {
       id: 'mass', label: 'Mass & balance', detail: 'build-up', after: ['geometry'],
-      reads: ['*.mass', '*.x', 'wing.arealMass'], outputs: ['total', 'xcg', 'h', 'items', 'I'],
+      reads: ['*.mass', '*.x', 'wing.arealMass', 'mission.ballast'], outputs: ['total', 'xcg', 'h', 'items', 'I'],
       run({ doc, inputs }) {
         const g = inputs.geometry, items = [];
         for (const c of doc.components) {
           if (c.type === 'wing') items.push({ id: c.id, name: c.name, mass: c.arealMass * g.S, x: g.xMacLE + 0.4 * g.mac, derived: true });
           else if (typeof c.mass === 'number') items.push({ id: c.id, name: c.name, mass: c.mass, x: c.x ?? 0 });
         }
+        // water ballast (sailplanes) in wing tanks, at the wing's own CG
+        if (doc.mission?.ballast > 0) items.push({ id: 'ballast', name: 'Water ballast', mass: doc.mission.ballast, x: g.xMacLE + 0.4 * g.mac, derived: true });
         const total = items.reduce((s, i) => s + i.mass, 0);
         if (!(total > 0)) throw new Error('total mass is zero');
         const xcg = items.reduce((s, i) => s + i.mass * i.x, 0) / total;

@@ -27,7 +27,7 @@ const massX = (m, x) => [n('mass', 'Mass', 'kg', m, 0, 5000, 0.05), n('x', 'Posi
 
 export const COMPONENT_TYPES = {
   // ---------- aircraft ----------
-  fuselage: { label: 'Fuselage', params: [n('length', 'Length', 'm', 1.6, 0.1, 80, 0.01), n('width', 'Max width', 'm', 0.16, 0.02, 8, 0.005), ...massX(4, 0.75)] },
+  fuselage: { label: 'Fuselage', params: [n('length', 'Length', 'm', 1.6, 0.1, 80, 0.01), n('width', 'Max width', 'm', 0.16, 0.02, 8, 0.005), ...massX(4, 0.75), n('laminar', 'Laminar run (length fraction)', '', 0, 0, 0.8, 0.01)] },
   wing: {
     label: 'Wing',
     params: [
@@ -37,18 +37,19 @@ export const COMPONENT_TYPES = {
       t('rootAirfoil', 'Root airfoil (NACA)', '4415'), t('tipAirfoil', 'Tip airfoil (NACA)', '4415'),
       n('x', 'Root LE position x', 'm', 0.52, -10, 100, 0.005), c('position', 'Vertical position', 'high', ['high', 'mid', 'low']),
       n('arealMass', 'Structural areal mass', 'kg/m²', 3.4, 0.5, 80, 0.05),
+      n('laminar', 'Laminar run (chord fraction)', '', 0, 0, 0.8, 0.01), c('flaps', 'Camber flaps (glide polar)', 'none', ['none', 'camber']),
     ],
   },
   htail: {
     label: 'Horizontal tail',
     params: [n('area', 'Area', 'm²', 0.16, 0.005, 100, 0.002), n('aspect', 'Aspect ratio', '', 4.5, 1, 10, 0.1), n('sweep', 'Sweep', '°', 5, 0, 60, 1),
       n('x', 'Aerodynamic center x', 'm', 1.55, 0, 100, 0.005), n('efficiency', 'Tail efficiency η', '', 0.9, 0.5, 1, 0.01),
-      n('tau', 'Elevator effectiveness τ', '', 0.5, 0.1, 1, 0.01), n('mass', 'Mass', 'kg', 0.55, 0, 5000, 0.01)],
+      n('tau', 'Elevator effectiveness τ', '', 0.5, 0.1, 1, 0.01), n('mass', 'Mass', 'kg', 0.55, 0, 5000, 0.01), n('laminar', 'Laminar run (chord fraction)', '', 0, 0, 0.8, 0.01)],
   },
   vtail: {
     label: 'Fin & rudder',
     params: [n('area', 'Area', 'm²', 0.1, 0.005, 100, 0.002), n('aspect', 'Aspect ratio', '', 1.6, 0.5, 5, 0.1), n('sweep', 'Sweep', '°', 25, 0, 60, 1),
-      n('x', 'Aerodynamic center x', 'm', 1.58, 0, 100, 0.005), n('height', 'Center height above CG', 'm', 0.2, 0, 20, 0.005), n('mass', 'Mass', 'kg', 0.35, 0, 5000, 0.01)],
+      n('x', 'Aerodynamic center x', 'm', 1.58, 0, 100, 0.005), n('height', 'Center height above CG', 'm', 0.2, 0, 20, 0.005), n('mass', 'Mass', 'kg', 0.35, 0, 5000, 0.01), n('laminar', 'Laminar run (chord fraction)', '', 0, 0, 0.8, 0.01)],
   },
   propulsor: {
     label: 'Motor & propeller',

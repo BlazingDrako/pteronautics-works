@@ -55,6 +55,10 @@ export function metricsFor(doc) {
 }
 export const metricInfo = (doc, metric) => metricsFor(doc).find(m => m.metric === metric) || { metric, label: metric, unit: '', d: 3, better: 0 };
 
+const SOARING_VARS = [
+  { key: 'climbRate', label: 'Average thermal climb', unit: 'm/s', min: 0.2, max: 6, step: 0.1 },
+  { key: 'ballast', label: 'Water ballast', unit: 'kg', min: 0, max: 300, step: 1 },
+];
 // Flight-condition variables (the workspace edits these in "Flight condition")
 const MISSION_VARS = [
   { key: 'cruiseSpeed', label: 'Cruise speed', unit: 'm/s', min: 10, max: 45, step: 0.5 },
@@ -71,6 +75,8 @@ export function tradeVariables(doc) {
     for (const p of T.params) if (p.kind === 'number' && typeof c[p.key] === 'number')
       out.push({ path: `${c.id}.${p.key}`, label: p.label, group: c.name, unit: p.unit || '', value: c[p.key], min: p.min, max: p.max, step: p.step });
   }
+  // a sailplane's soaring condition
+  if (doc.class === 'sailplane') for (const m of SOARING_VARS) if (typeof doc.mission?.[m.key] === 'number') out.push({ path: 'mission.' + m.key, label: m.label, group: 'Soaring', unit: m.unit, value: doc.mission[m.key], min: m.min, max: m.max, step: m.step });
   for (const m of MISSION_VARS) out.push({ path: 'mission.' + m.key, label: m.label, group: 'Flight condition', unit: m.unit, value: doc.mission?.[m.key] ?? 0, min: m.min, max: m.max, step: m.step });
   // the mission: its settings and each segment's values
   if (Array.isArray(doc.mission?.segments)) {

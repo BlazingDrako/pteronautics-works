@@ -115,7 +115,7 @@ export function renderReport(root, doc) {
     // 6 glide (sailplanes)
     if (gl) {
       const xs = gl.curve.map(c => c.V);
-      parts.push(sec(6, 'Glide and cross-country', h('p', {}, 'The parabolic drag polar at the flight weight and altitude, and MacCready\'s speed to fly between thermals. The drag is a fully turbulent handbook build-up, the pessimistic bound.'),
+      parts.push(sec(6, 'Glide and cross-country', h('p', {}, `The drag polar at the flight weight and altitude${gl.flaps ? ', flattened by the camber flaps' : ''}, and MacCready\'s speed to fly between thermals. Skin friction is mixed laminar and turbulent from each part\'s laminar run.`),
         kv([['Best glide', `${fx(gl.LDmax, 1)} @ ${fx(gl.Vmd * 3.6, 0)} km/h`], ['Minimum sink', `${fx(gl.minSink, 2)} m/s @ ${fx(gl.Vms * 3.6, 0)} km/h`], ['Stall (1 g)', `${fx(gl.Vs * 3.6, 0)} km/h`], ['Wing loading', `${fx(gl.wingLoading, 1)} kg/m²`]]),
         fig(3, `Glide polar (sink rate against airspeed) with the MacCready tangent for ${fx(gl.Wc, 1)} m/s climbs.`, chart({ w: 720, h: 250, x: [0, Math.max(...xs)], y: [-Math.min(Math.max(...gl.curve.map(c => c.sink)), gl.minSink * 6), gl.Wc * 1.15], xLabel: 'Airspeed (m/s)', yLabel: 'Vertical speed (m/s)',
           series: [{ pts: gl.curve.map(c => [c.V, -c.sink]), cls: 's-accent' }, { pts: [[0, gl.Wc], [gl.xc.V, -gl.xc.sink]], cls: 's-hl' }, { pts: [[0, 0], [Math.max(...xs), 0]], cls: 's-muted' }] })),
