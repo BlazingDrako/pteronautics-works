@@ -123,6 +123,16 @@ export function planformShapes(svg, doc, box, { detail = true, clMap = null, com
     }
   }
 
+  // ---- tail boom: if the tail sits behind the end of the body, carry the tail cone back to it ----
+  if (A.L > 0) {
+    const tailX = Math.max(A.tail ? A.tail.le(0) + 0.5 * A.tail.ch(0) : 0, A.fin ? A.fin.x0 + 0.5 * A.fin.c : 0);
+    if (tailX > A.L - 0.01) {
+      const hw = Math.max(bodyHalf(A.L, A.d, A.L * 0.999), A.d * 0.06);
+      const pts = [T(A.L * 0.97, hw), T(tailX, hw * 0.8), T(tailX, -hw * 0.8), T(A.L * 0.97, -hw)];
+      g.append(s('path', { d: path(pts) + ' Z', style: `fill:url(#${id}-body)` }), s('path', { d: path(pts) + ' Z', class: 'pf-outline', style: `stroke-width:${sw}` }));
+    }
+  }
+
   // ---- fin seen from above: a slim symmetric section ----
   if (A.fin) {
     const pts = [], th = 0.09 * A.fin.c;

@@ -46,6 +46,14 @@ export function modelTests(log) {
   throws('setPath on an unknown component throws', () => V.setPath(d, 'nacelle.mass', 1), /No component/);
   throws('a path without a dot is refused', () => V.getPath(d, 'wing'), /Bad path/);
 
+  // ---- edits that carry other parts ----
+  const e = V.clone(k), ht0 = V.firstOf(e, 'htail').x, vt0 = V.firstOf(e, 'vtail').x, bat0 = V.firstOf(e, 'battery').x;
+  const ch = V.applyEdit(e, 'fuselage.length', 1.45);
+  ok('shortening the fuselage moves the tail surfaces with its end', Math.abs(V.firstOf(e, 'htail').x - (ht0 - 0.2)) < 1e-12 && Math.abs(V.firstOf(e, 'vtail').x - (vt0 - 0.2)) < 1e-12, `htail ${ht0} → ${V.firstOf(e, 'htail').x}`);
+  ok('…and leaves the other parts where they are', V.firstOf(e, 'battery').x === bat0 && V.firstOf(e, 'fuselage').length === 1.45);
+  ok('…and reports every path it changed', ['fuselage.length', 'htail.x', 'vtail.x'].every(p => ch.includes(p)), ch.join(', '));
+  ok('a plain edit changes only its own path', V.applyEdit(V.clone(k), 'wing.span', 3).join() === 'wing.span');
+
   // ---- JSON ----
   const text = V.toJSON(k), back = V.fromJSON(text);
   ok('JSON round trip gives the same document', JSON.stringify(back) === JSON.stringify(k));

@@ -1,7 +1,7 @@
 // The aircraft workspace: systems tree and editors on the left, the vehicle view with lens panels in the centre,
 // the coupling graph and fidelity on the right, stat cards and the live requirements list along the bottom.
 import { h, s, icon, brand, themeButton, fx, fsig, pct, minus, ago, toast } from './dom.js';
-import { COMPONENT_TYPES, VEHICLE_CLASSES, setPath, getPath, firstOf } from '../model/vehicle.js';
+import { COMPONENT_TYPES, VEHICLE_CLASSES, applyEdit, firstOf } from '../model/vehicle.js';
 import { saveVehicle, downloadVehicle, pickVehicleFile, resetVehicle, isModified } from '../model/store.js';
 import { seeds } from '../model/seeds.js';
 import { CouplingGraph } from '../engine/graph.js';
@@ -68,9 +68,10 @@ export function renderWorkspace(root, doc) {
 
   // ---------- editing ----------
   function edit(path, value) {
-    setPath(doc, path, value);
+    const changed = applyEdit(doc, path, value);
     doc.updated = new Date().toISOString();
-    graph.invalidate(path);
+    graph.invalidate(changed);
+    if (changed.length > 1) paintTree();
     run();
     clearTimeout(saveTimer); saveTimer = setTimeout(() => { saveVehicle(doc); paintRev(); }, 250);
   }

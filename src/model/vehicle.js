@@ -161,6 +161,27 @@ export function setPath(doc, path, value) {
   comp[key] = value;
   return doc;
 }
+// An edit as the designer means it: some parameters carry other parts with them. Returns every path changed.
+//   fuselage.length: the tail surfaces stay mounted on the tail cone, so they move with the fuselage's end
+//   (which also changes the tail arm).
+export const TAIL_TYPES = ['htail', 'vtail'];
+export function applyEdit(doc, path, value) {
+  const changed = [path];
+  const [head, key] = splitPath(path);
+  const comp = head === 'mission' ? null : component(doc, head);
+  if (comp && comp.type === 'fuselage' && key === 'length' && typeof comp.length === 'number') {
+    const dL = value - comp.length;
+    for (const c of doc.components) {
+      if (!TAIL_TYPES.includes(c.type) || typeof c.x !== 'number') continue;
+      const spec = paramSpec(c.type, 'x');
+      c.x = Math.min(spec.max, Math.max(spec.min, c.x + dL));
+      changed.push(`${c.id}.x`);
+    }
+  }
+  setPath(doc, path, value);
+  return changed;
+}
+
 function splitPath(path) {
   const i = path.indexOf('.');
   if (i < 0) throw new Error(`Bad path "${path}"`);
