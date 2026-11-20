@@ -1,6 +1,7 @@
 // The vehicles the hangar starts with. Kestrel (fixed-wing) is the one this build can analyse; the others are
 // concept documents that show every class fits the same document shape.
 import { SCHEMA, VERSION, makeComponent as C } from './vehicle.js';
+import { makeSegment as G } from './segments.js';
 
 const base = (o) => ({ schema: SCHEMA, version: VERSION, status: 'concept', revision: 1, branch: 'main', updated: '2026-11-19T12:00:00Z', mission: {}, requirements: [], ...o });
 const R = (id, title, metric, op, target, unit, group) => ({ id, title, metric, op, target, unit, group });
@@ -8,7 +9,17 @@ const R = (id, title, metric, op, target, unit, group) => ({ id, title, metric, 
 export function kestrel() {
   return base({
     id: 'kestrel', name: 'Kestrel', class: 'fixed-wing', role: 'Electric survey UAS', status: 'active', revision: 14, branch: 'endurance-push',
-    mission: { altitude: 400, dT: 0, cruiseSpeed: 22 },
+    mission: {
+      altitude: 400, dT: 0, cruiseSpeed: 22,
+      segments: [
+        G('climb', 's1', { name: 'Climb out', to: 400 }),
+        G('cruise', 's2', { name: 'Transit to site', distance: 18, speed: 22, wind: 4 }),
+        G('loiter', 's3', { name: 'Survey grid', time: 55, speed: 21 }),
+        G('cruise', 's4', { name: 'Transit home', distance: 18, speed: 22, wind: -4 }),
+        G('descent', 's5', { name: 'Descent', to: 0 }),
+        G('reserve', 's6', { name: 'Reserve', time: 10 }),
+      ],
+    },
     components: [
       C('fuselage', 'fuselage', { name: 'Fuselage', length: 1.65, width: 0.16, mass: 4.2, x: 0.78 }),
       C('wing', 'wing', { name: 'Wing', span: 3.2, rootChord: 0.36, taper: 0.6, sweep: 0, twist: -2, dihedral: 3, rootAirfoil: '4415', tipAirfoil: '4415', x: 0.52, position: 'high', arealMass: 3.4 }),
@@ -31,6 +42,7 @@ export function kestrel() {
       R('R-08', 'Dutch roll damping ζ (MIL-F-8785C level 1)', 'stability.drZeta', '>=', 0.08, '', 'Stability'),
       R('R-09', 'Takeoff mass (regulatory class)', 'mass.total', '<=', 25, 'kg', 'Mass'),
       R('R-10', 'Wingspan (transport case)', 'geometry.span', '<=', 3.4, 'm', 'Geometry'),
+      R('R-11', 'Survey mission energy left after reserve', 'mission.margin', '>=', 5, '% usable', 'Mission'),
     ],
   });
 }

@@ -1,10 +1,11 @@
-// The fixed-wing analysis graph: atmosphere, geometry → aero, mass & balance → stability, performance → requirements.
+// The fixed-wing analysis graph: atmosphere, geometry → aero, mass & balance → stability, performance, mission → requirements.
 // Each node declares what it reads from the vehicle document and which nodes' outputs it needs.
 import { firstOf } from '../model/vehicle.js';
 import { evaluateRequirements } from './requirements.js';
 import * as A from '../adapters/aircraft.js';
 import { reBin, NPANEL } from '../adapters/airfoil.js';
 import { AirfoilWorker } from '../workers/client.js';
+import { flyMission } from './mission.js';
 
 const DEG = Math.PI / 180;
 
@@ -179,7 +180,20 @@ export function fixedWingNodes({ airfoil = null } = {}) {
       },
     },
     {
-      id: 'requirements', label: 'Requirements', after: ['geometry', 'aero', 'mass', 'stability', 'performance'], reads: ['requirements.*'],
+      // The mission profile (doc.mission.segments) flown segment by segment: time, distance and battery energy
+      id: 'mission', label: 'Mission', detail: 'profile', after: ['geometry', 'aero', 'mass', 'atmosphere'],
+      reads: ['mission.segments', 'mission.dT', 'propulsor.*', 'battery.*'],
+      outputs: ['segments', 'track', 'energy', 'usable', 'margin', 'duration', 'distance', 'feasible'],
+      run({ doc, inputs }) {
+        const g = inputs.geometry, ae = inputs.aero, m = inputs.mass;
+        const prop = firstOf(doc, 'propulsor'), bat = firstOf(doc, 'battery');
+        if (!prop || !bat) throw new Error('needs a motor and a battery');
+        const ac = A.perfAircraft('works:' + doc.id, { S: g.S, b: g.span, e: ae.e, CD0: ae.CD0, CLa: ae.CLa, CLmax: ae.CLmax, mass: m.total, power: prop.power, propEff: prop.propEff });
+        return flyMission({ segments: doc.mission.segments || [], ac, W: m.total * A.G0, motorEff: prop.motorEff, usable: bat.energy * bat.usable, dT: doc.mission.dT ?? 0 });
+      },
+    },
+    {
+      id: 'requirements', label: 'Requirements', after: ['geometry', 'aero', 'mass', 'stability', 'performance', 'mission'], reads: ['requirements.*'],
       outputs: ['list', 'met', 'total'],
       run({ doc, inputs }) {
         const list = evaluateRequirements(doc.requirements || [], inputs);
