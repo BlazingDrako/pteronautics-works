@@ -11,7 +11,7 @@ const nice = (lo, hi, n = 5) => {
 // chart({ w, h, x: [lo, hi], y: [lo, hi], series: [{ pts: [[x, y]], cls }], marks: [{ x, label, cls }], xLabel, yLabel, compact })
 export function chart(o) {
   const { w = 480, h = 260, compact = false } = o;
-  const pad = compact ? { l: 30, r: 8, t: 8, b: 20 } : { l: 48, r: 14, t: 14, b: 36 };
+  const pad = compact ? { l: 30, r: 8, t: 8, b: 20 } : { l: 52, r: 16, t: o.legend ? 30 : 14, b: 38 };
   const [x0, x1] = o.x, [y0, y1] = o.y;
   const X = v => pad.l + (v - x0) / (x1 - x0) * (w - pad.l - pad.r), Y = v => h - pad.b - (v - y0) / (y1 - y0) * (h - pad.t - pad.b);
   const svg = s('svg', { viewBox: `0 0 ${w} ${h}`, role: 'img', 'aria-label': o.label || 'chart' });
@@ -33,7 +33,15 @@ export function chart(o) {
   for (const m of o.marks || []) {
     if (!isFinite(m.x) || m.x < x0 || m.x > x1) continue;
     svg.append(s('line', { x1: X(m.x), x2: X(m.x), y1: pad.t, y2: h - pad.b, class: m.cls || 's-muted' }));
-    if (m.label) svg.append(s('text', { x: X(m.x) + 3, y: pad.t + 10 + (m.row || 0) * 12, class: 'ax-t' }, m.label));
+    if (m.label) svg.append(s('text', { x: X(m.x) + 4, y: pad.t + 12 + (m.row || 0) * 14, class: 'ax-ref', style: `fill:${m.color || 'var(--text-2)'}` }, m.label));
+  }
+  // legend along the top, Atlas style: a short line swatch and a label
+  if (o.legend && !compact) {
+    let x = pad.l;
+    for (const L of o.legend) {
+      svg.append(s('line', { x1: x, x2: x + 16, y1: 12, y2: 12, class: L.cls }), s('text', { x: x + 21, y: 15.5, class: 'leg-t' }, L.label));
+      x += 30 + L.label.length * 6;
+    }
   }
   for (const p of o.points || []) if (isFinite(p.x) && isFinite(p.y)) svg.append(s('circle', { cx: X(p.x), cy: Y(clip(p.y)), r: p.r || 3.5, style: `fill:${p.color || 'var(--accent)'}` }));
   return svg;

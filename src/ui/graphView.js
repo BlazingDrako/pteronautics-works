@@ -1,7 +1,7 @@
 // The coupling graph panel: every analysis node with its state (current / stale / running / failed) and run time.
 import { s } from './dom.js';
 
-const W = 310, BOX_H = 42, ROW = 82, PAD = 8;
+const W = 310, BOX_H = 48, ROW = 86, PAD = 8;
 
 export function graphSvg(graph) {
   const lv = graph.levels(), rows = new Map();
@@ -25,14 +25,14 @@ export function graphSvg(graph) {
     const out = st.outputs;
     let detail;
     if (st.state === 'running') detail = 'running…';
-    else if (st.state === 'stale') detail = 'stale · queued';
+    else if (st.state === 'stale') detail = 'stale';
     else if (st.state === 'failed') detail = 'failed';
     else detail = `${(out && out.method) ? shortMethod(out.method) : nd.detail || 'current'} · ${fmtMs(st.ms)}`;
     const g = s('g', { class: 'cg-node ' + st.state });
     g.append(s('title', {}, `${nd.label}: ${st.state}${st.error ? ' — ' + st.error : ''}${st.ms != null ? ` (${fmtMs(st.ms)})` : ''}`));
-    g.append(s('rect', { x: b.x, y: b.y, width: b.w, height: BOX_H, rx: 8 }));
-    g.append(s('text', { x: b.x + b.w / 2, y: b.y + 17, class: 't', 'text-anchor': 'middle' }, nd.label));
-    g.append(s('text', { x: b.x + b.w / 2, y: b.y + 32, class: 'd', 'text-anchor': 'middle' }, detail));
+    g.append(s('rect', { x: b.x, y: b.y, width: b.w, height: BOX_H, rx: 10 }));
+    g.append(s('text', { x: b.x + b.w / 2, y: b.y + 20, class: 't', 'text-anchor': 'middle' }, nd.label));
+    g.append(s('text', { x: b.x + b.w / 2, y: b.y + 36, class: 'd', 'text-anchor': 'middle' }, detail));
     g.append(s('circle', { cx: b.x + b.w - 8, cy: b.y + 8, r: 3.5, class: 'cg-dot ' + st.state }));
     svg.append(g);
   }

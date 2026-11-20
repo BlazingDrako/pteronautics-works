@@ -23,7 +23,7 @@ export function fixedWingNodes() {
       },
     },
     {
-      id: 'geometry', label: 'Geometry', detail: 'planform · surfaces',
+      id: 'geometry', label: 'Geometry', detail: 'planform',
       reads: ['wing.*', 'htail.*', 'vtail.*', 'fuselage.*', 'propulsor.diameter', 'propulsor.x'],
       outputs: ['W', 'P', 'span', 'S', 'AR', 'mac', 'xMacLE', 'ht', 'vt', 'fus'],
       run({ doc }) {
@@ -64,7 +64,7 @@ export function fixedWingNodes() {
       },
     },
     {
-      id: 'mass', label: 'Mass & balance', detail: 'build-up · CG', after: ['geometry'],
+      id: 'mass', label: 'Mass & balance', detail: 'build-up', after: ['geometry'],
       reads: ['*.mass', '*.x', 'wing.arealMass'], outputs: ['total', 'xcg', 'h', 'items', 'I'],
       run({ doc, inputs }) {
         const g = inputs.geometry, items = [];
@@ -82,7 +82,7 @@ export function fixedWingNodes() {
       },
     },
     {
-      id: 'stability', label: 'Stability', detail: 'static · modes', after: ['geometry', 'aero', 'mass', 'atmosphere'], reads: ['mission.cruiseSpeed'],
+      id: 'stability', label: 'Stability', detail: 'modes', after: ['geometry', 'aero', 'mass', 'atmosphere'], reads: ['mission.cruiseSpeed'],
       outputs: ['SM', 'xnp', 'hn', 'trim', 'sp', 'ph', 'dr', 'roll', 'spiral', 'hq', 'spZeta', 'drZeta'],
       run({ doc, inputs }) {
         const g = inputs.geometry, ae = inputs.aero, m = inputs.mass, atm = inputs.atmosphere;
@@ -108,7 +108,7 @@ export function fixedWingNodes() {
       },
     },
     {
-      id: 'performance', label: 'Performance', detail: 'speeds · endurance · range', after: ['geometry', 'aero', 'mass', 'atmosphere'],
+      id: 'performance', label: 'Performance', detail: 'endurance', after: ['geometry', 'aero', 'mass', 'atmosphere'],
       reads: ['mission.cruiseSpeed', 'propulsor.*', 'battery.*'],
       outputs: ['Vs', 'LDmax', 'RoC', 'endurance', 'range', 'cruise', 'curve'],
       run({ doc, inputs }) {

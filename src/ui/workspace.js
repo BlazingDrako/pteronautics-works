@@ -35,7 +35,7 @@ export function renderWorkspace(root, doc) {
   const crumbs = h('nav', { class: 'crumbs', 'aria-label': 'Zoom level' });
   const layerBar = h('div', { class: 'row', role: 'group', 'aria-label': 'Layers', style: { gap: '6px' } });
   const canvas = h('div', { class: 'canvas' });
-  const graphHead = h('span', { class: 'mono', style: { fontSize: '11px' } });
+  const graphHead = h('span', { style: { fontSize: '12px', fontWeight: '500' } });
   const graphBox = h('div');
   const fidelity = h('div', { class: 'fid' });
   const fidNote = h('div', { class: 'note' });
@@ -85,6 +85,7 @@ export function renderWorkspace(root, doc) {
     canvas.classList.add('busy');
     await graph.run(doc);
   }
+  addEventListener('themechange', () => { if (canvas.isConnected) paintCanvas(); });
   graph.on(ev => { paintGraph(); if (ev.done) { canvas.classList.toggle('busy', !graph.isCurrent()); paintOutputs(); } });
 
   async function loadFile() {
@@ -163,7 +164,7 @@ export function renderWorkspace(root, doc) {
       return h('div', { class: 'field' }, h('div', { class: 'field-top' }, h('label', {}, p.label), inp));
     });
     const derived = h('div', { class: 'derived-box' });
-    editor.replaceChildren(h('div', { class: 'sec-row' }, h('span', { class: 'sec' }, comp.name), h('span', { class: 'mono muted', style: { fontSize: '11px' } }, T.label)), ...fields, derived);
+    editor.replaceChildren(h('div', { class: 'sec-row' }, h('span', { class: 'sec' }, comp.name), h('span', { class: 'muted', style: { fontSize: '12px' } }, T.label)), ...fields, derived);
     editor._derived = { box: derived, comp };
     paintDerived();
   }
@@ -181,7 +182,7 @@ export function renderWorkspace(root, doc) {
     editor._derived = null;
     const m = outputs().mass;
     if (!m) { editor.replaceChildren(h('div', { class: 'sec' }, 'Mass & balance'), h('p', { class: 'note' }, 'Not computed.')); return; }
-    editor.replaceChildren(h('div', { class: 'sec-row' }, h('span', { class: 'sec' }, 'Mass & balance'), h('span', { class: 'mono muted', style: { fontSize: '11px' } }, 'build-up')),
+    editor.replaceChildren(h('div', { class: 'sec-row' }, h('span', { class: 'sec' }, 'Mass & balance'), h('span', { class: 'muted', style: { fontSize: '12px' } }, 'build-up')),
       ...m.items.slice().sort((a, b) => b.mass - a.mass).map(i => h('div', { class: 'derived' }, h('span', {}, i.name + (i.derived ? ' (from area)' : '')), h('span', { class: 'mono' }, `${fx(i.mass, 2)} kg @ ${fx(i.x, 2)} m`))),
       h('div', { class: 'derived', style: { borderTop: '1px solid var(--border)', marginTop: '6px', paddingTop: '6px' } }, h('b', {}, 'Total'), h('b', { class: 'mono' }, `${fx(m.total, 2)} kg`)),
       h('div', { class: 'derived' }, h('span', {}, 'CG'), h('span', { class: 'mono' }, `${fx(m.xcg, 3)} m · ${fx(m.h * 100, 1)}% MAC`)),
@@ -206,10 +207,22 @@ export function renderWorkspace(root, doc) {
       i ? h('span', { class: 'crumb-sep', 'aria-hidden': 'true' }, '›') : null,
       h('button', { class: 'crumb' + (ui.level === l.id ? ' on' : ''), type: 'button', 'aria-current': ui.level === l.id ? 'true' : null, onclick: () => { ui.level = l.id; paintCrumbs(); paintCanvas(); } }, l.label),
     ]).filter(Boolean));
-    const toggles = ui.level === 'vehicle' ? [['clmap', 'cℓ map'], ['load', 'Span load'], ['mac', 'MAC'], ['cg', 'CG & NP'], ['items', 'Mass items'], ['lenses', 'Lenses']] : [];
+    const toggles = [['clmap', 'Lift colouring (cℓ / cℓ,max)'], ['load', 'Span load'], ['mac', 'Mean aerodynamic chord'], ['cg', 'CG and neutral point'], ['items', 'Mass items'], ['lenses', 'Lens panels']];
     const focus = h('button', { class: 'tg sm focus-btn' + (ui.focus ? ' on' : ''), type: 'button', 'aria-pressed': ui.focus ? 'true' : 'false', title: 'Hide the side panels so the view fills the window (F)', onclick: toggleFocus }, ui.focus ? 'Exit focus' : 'Focus');
-    layerBar.replaceChildren(focus, ...toggles.map(([k, label]) => h('button', { class: 'tg sm' + (ui.layers[k] ? ' on' : ''), type: 'button', 'aria-pressed': ui.layers[k] ? 'true' : 'false', onclick: () => { ui.layers[k] = !ui.layers[k]; paintCrumbs(); paintCanvas(); } }, label)));
+    if (ui.level !== 'vehicle') { layerBar.replaceChildren(focus); return; }
+    // the layers live in a small menu of Atlas-style switches
+    const menu = h('div', { class: 'layer-menu', role: 'menu', hidden: !ui.layersOpen },
+      h('div', { class: 'sec', style: { marginBottom: '6px' } }, 'Layers'),
+      ...toggles.map(([k, label]) => {
+        const inp = h('input', { type: 'checkbox', checked: ui.layers[k] });
+        inp.addEventListener('change', () => { ui.layers[k] = inp.checked; paintCanvas(); });
+        return h('label', { class: 'toggle' }, h('span', {}, label), inp, h('span', { class: 'sw' }));
+      }));
+    const on = toggles.filter(([k]) => ui.layers[k]).length;
+    const btn = h('button', { class: 'tg sm' + (ui.layersOpen ? ' on' : ''), type: 'button', 'aria-expanded': ui.layersOpen ? 'true' : 'false', onclick: e => { e.stopPropagation(); ui.layersOpen = !ui.layersOpen; paintCrumbs(); } }, `Layers · ${on}`, h('span', { 'aria-hidden': 'true', style: { opacity: '.6' } }, '▾'));
+    layerBar.replaceChildren(focus, h('div', { class: 'layer-wrap', onclick: e => e.stopPropagation() }, btn, menu));
   }
+  addEventListener('click', () => { if (ui.layersOpen && canvas.isConnected) { ui.layersOpen = false; paintCrumbs(); } });
 
   function paintCanvas() {
     const out = outputs();
@@ -245,15 +258,15 @@ export function renderWorkspace(root, doc) {
 
   function stabilityLens(out) {
     const st = out.stability;
-    const box = h('div', { class: 'lens plain' }, h('h4', {}, 'Stability · modes', h('span', {}, 'stick-fixed')));
+    const box = h('div', { class: 'lens plain' }, h('h4', {}, 'Dynamic modes', h('span', {}, 's-plane')));
     if (!st) { box.append(h('div', { class: 'cap' }, 'not computed')); return box; }
     const roots = [...st.roots.lon.map(r => ({ r, c: 'var(--accent)' })), ...st.roots.lat.map(r => ({ r, c: 'var(--hl)' }))];
     const re = roots.map(x => x.r[0]), im = roots.map(x => x.r[1]);
     const xr = extent([...re, 0], 0.12), yr = extent([...im, 0], 0.12);
     box.append(chart({ w: 196, h: 104, compact: true, x: xr, y: yr, series: [{ pts: [[0, yr[0]], [0, yr[1]]], cls: 's-muted' }], points: roots.map(({ r, c }) => ({ x: r[0], y: r[1], color: c })), label: 'Eigenvalues in the s-plane' }));
     const sp = st.sp, dr = st.dr, spi = st.spiral;
-    box.append(h('div', { class: 'cap' }, `short period ζ ${sp.real ? 'real' : fx(sp.zeta, 2)} · Dutch roll ζ ${dr ? fx(dr.zeta, 3) : '—'}`),
-      h('div', { class: 'cap' }, h('span', { style: { color: 'var(--accent)' } }, '● longitudinal'), '  ', h('span', { style: { color: 'var(--hl)' } }, '● lateral'), `  · spiral ${spi && spi.re > 0 ? 'T₂ ' + fx(spi.t2, 1) + ' s' : 'stable'}`));
+    box.append(h('div', { class: 'cap' }, 'Short period ζ ', h('b', {}, sp.real ? 'real' : fx(sp.zeta, 2)), ' · Dutch roll ζ ', h('b', {}, dr ? fx(dr.zeta, 3) : '—')),
+      h('div', { class: 'cap' }, h('span', { style: { color: 'var(--accent)' } }, '● longitudinal'), '   ', h('span', { style: { color: 'var(--hl)' } }, '● lateral'), spi && spi.re > 0 ? ` · spiral doubles in ${fx(spi.t2, 1)} s` : ' · spiral stable'));
     return box;
   }
   function powerCurve(p, w, hgt, compact) {
@@ -262,15 +275,16 @@ export function renderWorkspace(root, doc) {
       w, h: hgt, compact, x: [Math.min(...xs), Math.max(...xs)], y: [0, top],
       xLabel: compact ? null : 'True airspeed (m/s)', yLabel: compact ? null : 'Power (W)', label: 'Power required against airspeed',
       series: [{ pts: p.curve.map(c => [c.V, c.Pel]), cls: 's-accent' }, { pts: p.curve.map(c => [c.V, c.Preq]), cls: 's-muted' }, ...(compact ? [] : [{ pts: p.curve.map(c => [c.V, c.Pav]), cls: 's-good' }])],
-      marks: [{ x: p.Vs, label: compact ? 'Vs' : `stall ${fx(p.Vs, 1)}`, cls: 's-warn' }, { x: p.Vend, label: compact ? '' : `endurance ${fx(p.Vend, 1)}`, row: 1 }, { x: p.Vrange, label: compact ? '' : `range ${fx(p.Vrange, 1)}`, row: 2 }, { x: p.cruise.V, label: compact ? 'cruise' : `cruise ${fx(p.cruise.V, 1)}`, cls: 's-hl', row: compact ? 1 : 3 }],
+      legend: [{ label: 'Battery power', cls: 's-accent' }, { label: 'Aerodynamic power required', cls: 's-muted' }, { label: 'Shaft power available', cls: 's-good' }],
+      marks: [{ x: p.Vs, label: compact ? '' : `Stall ${fx(p.Vs, 1)} m/s`, cls: 's-warn', color: 'var(--text-3)' }, { x: p.Vend, label: compact ? '' : `Best endurance ${fx(p.Vend, 1)}`, cls: 's-warn', row: 1, color: 'var(--text-2)' }, { x: p.Vrange, label: compact ? '' : `Best range ${fx(p.Vrange, 1)}`, cls: 's-warn', row: 2, color: 'var(--text-2)' }, { x: p.cruise.V, label: compact ? '' : `Cruise ${fx(p.cruise.V, 1)}`, cls: 's-hl', row: 3, color: 'var(--hl)' }],
       points: [{ x: p.cruise.V, y: p.cruise.P, color: 'var(--hl)' }],
     });
   }
   function powerLens(out) {
     const p = out.performance;
-    const box = h('button', { class: 'lens', type: 'button', onclick: goto('mission') }, h('h4', {}, 'Mission · power', h('span', {}, `${fx(p?.E, 0)} Wh`)));
+    const box = h('button', { class: 'lens', type: 'button', onclick: goto('mission') }, h('h4', {}, 'Power curve', h('span', {}, `${fx(p?.E, 0)} Wh usable`)));
     if (!p) { box.append(h('div', { class: 'cap' }, 'not computed')); return box; }
-    box.append(powerCurve(p, 196, 104, true), h('div', { class: 'cap' }, `battery draw at cruise ${fx(p.cruise.P, 0)} W · ${fx(p.cruise.endurance, 0)} min`), h('div', { class: 'go' }, 'open mission view ›'));
+    box.append(powerCurve(p, 196, 104, true), h('div', { class: 'cap' }, 'Cruise draw ', h('b', {}, `${fx(p.cruise.P, 0)} W`), ' · ', h('b', {}, `${fx(p.cruise.endurance, 0)} min`)), h('div', { class: 'go' }, 'Open mission view →'));
     return box;
   }
   function airfoilSvg(code, w, hgt, chordPx) {
@@ -292,9 +306,9 @@ export function renderWorkspace(root, doc) {
   }
   function sectionLens(out) {
     const x = sectionAt(out);
-    const box = h('button', { class: 'lens', type: 'button', onclick: goto('section') }, h('h4', {}, `Section · η ${SECTION_ETA}`, h('span', {}, x ? `Re ${fx(x.Re / 1e6, 2)} M` : '')));
+    const box = h('button', { class: 'lens', type: 'button', onclick: goto('section') }, h('h4', {}, `Section at η ${SECTION_ETA}`, h('span', {}, x ? `Re ${fx(x.Re / 1e6, 2)} M` : '')));
     if (!x) { box.append(h('div', { class: 'cap' }, 'not computed')); return box; }
-    box.append(airfoilSvg(x.code, 196, 54, 180), h('div', { class: 'cap' }, `NACA ${x.code} · chord ${fx(x.c * 1000, 0)} mm · local cℓ ${fx(x.cl, 3)}`), h('div', { class: 'go' }, 'open section view ›'));
+    box.append(airfoilSvg(x.code, 196, 54, 180), h('div', { class: 'cap' }, `NACA ${x.code} · chord `, h('b', {}, `${fx(x.c * 1000, 0)} mm`), ' · cℓ ', h('b', {}, fx(x.cl, 2))), h('div', { class: 'go' }, 'Open section view →'));
     return box;
   }
 
@@ -303,8 +317,8 @@ export function renderWorkspace(root, doc) {
     if (!p) return h('div', { class: 'level-pane' }, h('div', { class: 'placeholder' }, 'Performance is not computed (see the coupling graph).'));
     return h('div', { class: 'level-pane' },
       h('h3', {}, 'Mission · cruise power and endurance'),
-      h('div', { class: 'note' }, 'Battery power against airspeed (solid), aerodynamic power required (dashed) and shaft power available (green), at the flight condition. Endurance and range speeds are the minimum-power and maximum V/P points above 1.2 Vs.'),
-      powerCurve(p, 900, 330, false),
+      h('div', { class: 'note' }, 'At the current flight condition. Best endurance is the speed of least battery power, best range the speed of most distance per joule, both kept above 1.2 × stall speed.'),
+      plotCard('Power against airspeed', powerCurve(p, 900, 340, false)),
       h('div', { class: 'kv' },
         kv('Endurance (best)', `${fx(p.endurance, 0)} min @ ${fx(p.Vend, 1)} m/s`), kv('Range (best)', `${fx(p.range, 0)} km @ ${fx(p.Vrange, 1)} m/s`),
         kv('Cruise endurance', `${fx(p.cruise.endurance, 0)} min`), kv('Cruise range', `${fx(p.cruise.range, 0)} km`),
@@ -320,12 +334,13 @@ export function renderWorkspace(root, doc) {
     const clmax = Math.min(g.root.clmax, g.tip.clmax);
     const cl = chart({ w: 900, h: 250, x: [0, 1], y: [0, Math.max(clmax, ...stripsMax.map(p => p.cl)) * 1.1], xLabel: 'Span station η = 2y/b', yLabel: 'Local cℓ', label: 'Local lift coefficient along the span',
       series: [{ pts: strips.map(p => [p.eta, p.cl]), cls: 's-accent' }, { pts: stripsMax.map(p => [p.eta, p.cl]), cls: 's-hl' }, { pts: [[0, clmax], [1, clmax]], cls: 's-warn' }],
-      marks: ae.stall?.firstStall ? [{ x: ae.stall.firstStall.eta, label: `stall starts η ${fx(ae.stall.firstStall.eta, 2)}`, cls: 's-hl' }] : [] });
+      legend: [{ label: `Cruise trim, CL ${fx(st.CLtrim, 2)}`, cls: 's-accent' }, { label: `At CL,max ${fx(ae.CLmax, 2)}`, cls: 's-hl' }, { label: `Section cℓ,max ${fx(clmax, 2)}`, cls: 's-warn' }],
+      marks: ae.stall?.firstStall ? [{ x: ae.stall.firstStall.eta, label: `Stall starts at η ${fx(ae.stall.firstStall.eta, 2)}`, cls: 's-hl', color: 'var(--hl)' }] : [] });
     const drag = ae.drag.map(d => kv(d.name, `${fx(d.CD * 1e4, 1)} counts`));
     return h('div', { class: 'level-pane' },
       h('h3', {}, `Wing · ${ae.method}${ae.stall ? ' + nonlinear stall strips' : ''}`),
       h('div', { class: 'note' }, `Local cℓ at cruise trim (blue, CL ${fx(st.CLtrim, 2)}) and scaled linearly to CL,max ${fx(ae.CLmax, 2)} (orange), against the section cℓ,max ${fx(clmax, 2)} (amber). Where orange crosses amber first is where a linear model expects the stall to start.`),
-      cl,
+      plotCard('Local lift coefficient along the span', cl),
       h('div', { class: 'kv' },
         kv('Area S', `${fx(g.S, 3)} m²`), kv('Span b', `${fx(g.span, 2)} m`), kv('Aspect ratio', fx(g.AR, 2)), kv('MAC', `${fx(g.mac, 3)} m`),
         kv('CLα', `${fx(ae.CLa, 3)} /rad`), kv('αL0', `${minus(fx(ae.alphaL0, 2))}°`), kv('Span efficiency (inviscid)', fx(ae.eInv, 3)), kv('Oswald e', fx(ae.e, 3)),
@@ -337,7 +352,7 @@ export function renderWorkspace(root, doc) {
     if (!x) return h('div', { class: 'level-pane' }, h('div', { class: 'placeholder' }, 'Not computed.'));
     return h('div', { class: 'level-pane' },
       h('h3', {}, `Section at η ${SECTION_ETA} · NACA ${x.code}`),
-      airfoilSvg(x.code, 900, 200, 760),
+      plotCard(`NACA ${x.code}`, airfoilSvg(x.code, 900, 200, 760)),
       h('div', { class: 'kv' }, kv('Chord', `${fx(x.c * 1000, 0)} mm`), kv('Reynolds', `${fx(x.Re / 1e6, 3)} M`), kv('Local cℓ at cruise', fx(x.cl, 3)), kv('Thickness', `${fx(x.sec.tc * 100, 0)}%`),
         kv('Camber', `${fx(x.sec.camber * 100, 0)}%`), kv('Zero-lift α (thin airfoil)', `${minus(fx(x.sec.alpha0, 2))}°`), kv('cm,c/4 (thin airfoil)', minus(fx(x.sec.cm, 3))), kv('cℓ,max (handbook)', fx(x.sec.clmax, 2))),
       h('div', { class: 'placeholder' }, 'Next slice: the viscous section lens. The core already has the mfoil viscous panel solver (core/solvers/mfoil/); it will run at this station\'s Reynolds number and local cℓ and feed a real polar back into the wing\'s stall and drag.'));
@@ -347,11 +362,12 @@ export function renderWorkspace(root, doc) {
       h('div', { class: 'placeholder' }, 'Not in this slice. It will show the mfoil boundary-layer solution at the selected section: transition location, shape factor, skin friction and separation, on the upper and lower surfaces.'));
   }
   const kv = (k, v) => h('div', {}, h('span', {}, k), h('b', {}, v));
+  const plotCard = (title, el) => h('div', { class: 'plot-card' }, h('h4', {}, title), el);
 
   // ---------- right: coupling graph and fidelity ----------
   function paintGraph() {
     const sm = graphSummary(graph);
-    graphHead.className = 'mono ' + sm.cls; graphHead.textContent = sm.text;
+    graphHead.className = sm.cls; graphHead.textContent = sm.text;
     graphBox.replaceChildren(graphSvg(graph));
   }
   function paintFidelity() {
@@ -385,7 +401,7 @@ export function renderWorkspace(root, doc) {
     const rq = outputs().requirements;
     const label = { met: 'met', marginal: 'marginal', fail: 'failing' };
     reqs.replaceChildren(
-      h('div', { class: 'sec-row' }, h('span', { class: 'sec' }, 'Requirements'), h('span', { class: 'mono muted', style: { fontSize: '11px' } }, rq ? `${rq.met} met · ${rq.marginal} marginal · ${rq.failing} failing · margin < 5% is marginal` : 'not computed')),
+      h('div', { class: 'sec-row' }, h('span', { class: 'sec' }, 'Requirements'), h('span', { class: 'muted', style: { fontSize: '12px' } }, rq ? `${rq.met} met · ${rq.marginal} marginal · ${rq.failing} failing · margin < 5% is marginal` : 'not computed')),
       h('div', { class: 'mx-wrap' }, h('table', { class: 'rq' },
         h('thead', {}, h('tr', {}, ['ID', 'Requirement', 'Area', 'Target', 'Value', 'Margin', 'Status'].map(t => h('th', {}, t)))),
         h('tbody', {}, (rq ? rq.list : doc.requirements).map(r => {
