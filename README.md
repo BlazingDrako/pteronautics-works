@@ -28,16 +28,14 @@ Plain ES modules, no build step, no dependencies. Browsers need a local server f
 python3 serve.py
 ```
 
-It opens the site at http://localhost:8790: the landing page at `/`, the app at `/app/`, the tests at `/tests/` (Atlas uses 8765, so both can run side by side). `python3 serve.py 9000 --no-browser` picks another port and skips opening the browser.
+It opens http://localhost:8790 (the tests are at `/tests/`) (Atlas uses 8765, so both can run side by side). `python3 serve.py 9000 --no-browser` picks another port and skips opening the browser.
 
 ## The website
 
-The site is the repository itself, served as static files:
+The repository is served as it is by GitHub Pages from `main` (Settings → Pages → Deploy from a branch: `main`, root); `.nojekyll` makes Pages serve the files without processing them.
 
-- `/` is the landing page (`index.html`, `site/`). Its figures are live, built from the same modules as the app: Kestrel solved by the coupling graph and drawn in 3D, sliders that drive the real graph, an mfoil run for the airfoil lab, and the thin-airfoil against viscous comparison computed in a worker.
-- `/app/` is Works itself, and `/tests/` the test page.
-
-GitHub Pages serves it straight from the `main` branch (Settings → Pages → Deploy from a branch: `main`, root), the same way as Atlas; `.nojekyll` makes Pages serve the files as they are. Every push to `main` updates https://blazingdrako.github.io/pteronautics-works/.
+- https://blazingdrako.github.io/pteronautics-works/ opens Works itself (`index.html`), and `/tests/` the test page. `/app/`, where Works lived for a while, redirects to the root and keeps the `#/v/<id>` route.
+- The family's home page, which covers both Atlas and Works, is a separate site: https://blazingdrako.github.io/pteronautics/ (repository `pteronautics`). It loads some Works modules live to draw its figures (Kestrel in 3D, the coupling demo, an airfoil solution), so if you move or rename one of the files its README lists, update that site too.
 
 ## Tests
 
@@ -51,8 +49,8 @@ Open http://localhost:8790/tests/ with the server running. The page runs:
 ## Layout
 
 ```
-index.html, site/              landing page and its script and styles
-app/index.html, css/works.css  app page and styles (design tokens shared with Atlas)
+index.html, css/works.css      app page and styles (design tokens shared with Atlas)
+app/index.html                 redirect from the old /app/ address
 src/app.js                     routing: #/ hangar, #/v/<id> workspace
 src/model/                     vehicle document (vehicle.js), seeds, storage and .json files
 src/engine/graph.js            the coupling engine

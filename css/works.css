@@ -372,6 +372,8 @@ svg text { font-family: var(--font); }
 }
 
 /* ---------- 3D view ---------- */
+/* no graph paper behind the 3D view: the model's own ground grid is the only grid */
+.canvas.v3d-on, :root[data-resolved-theme="dark"] .canvas.v3d-on { background-image: radial-gradient(ellipse 70% 60% at 50% 45%, var(--glow), transparent 70%); }
 .seg { display: inline-flex; gap: 4px; }
 .view-svg.v3d-wrap { overflow: hidden; }
 canvas.v3d { position: absolute; inset: 0; display: block; cursor: grab; touch-action: none; outline: none; }

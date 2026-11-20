@@ -90,7 +90,7 @@ function sidebar() {
     planned('airfoil', 'Airfoils'), planned('motor', 'Engines & motors'), planned('grid', 'Materials'), planned('cell', 'Propellants & cells'),
     h('div', { class: 'nav-group' }, 'Output'),
     planned('doc', 'Reports'),
-    h('div', { class: 'sidebar-foot' }, themeButton(), h('div', { class: 'sidebar-credit' }, 'Made by Andrew Aguiar')));
+    h('div', { class: 'sidebar-foot' }, themeButton(), h('div', { class: 'sidebar-credit' }, 'Made by Andrew Aguiar · ', h('a', { href: 'https://blazingdrako.github.io/pteronautics/' }, 'Pteronautics'))));
 }
 
 async function importVehicle(rerender) {

@@ -232,6 +232,7 @@ export function renderWorkspace(root, doc) {
   function paintCanvas() {
     const out = outputs();
     canvas.classList.toggle('busy', !graph.isCurrent());
+    canvas.classList.toggle('v3d-on', ui.level === 'vehicle' && ui.view === '3d');   // 3D draws its own ground grid
     if (ui.level !== 'vehicle') {
       canvas.replaceChildren(ui.level === 'mission' ? missionPane(out) : ui.level === 'wing' ? wingPane(out) : lab.pane(ui.level, out));
       return;
