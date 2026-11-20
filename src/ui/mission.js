@@ -2,20 +2,20 @@
 // what flying it takes: the altitude and battery energy through the flight, each segment's time, distance, power
 // and energy, and what is left at landing. The profile runs through the same coupled graph as the workspace, so a
 // change to the airframe there shows here, and a segment edited here reaches the requirements there.
-import { h, icon, brand, themeButton, fx, toast } from './dom.js';
+import { h, icon, brand, themeButton, fx, fW, fWh, toast } from './dom.js';
 import { saveVehicle } from '../model/store.js';
 import { noteEdit, recordStatuses } from '../model/history.js';
-import { SEGMENT_KINDS, makeSegment, newSegmentId } from '../model/segments.js';
+import { SEGMENT_KINDS, makeSegment, newSegmentId, kindsFor } from '../model/segments.js';
 import { MISSION_SETTINGS, firstOf } from '../model/vehicle.js';
 import { CouplingGraph } from '../engine/graph.js';
-import { fixedWingNodes } from '../analyses/fixedWing.js';
+import { analysisNodes } from '../analyses/classes.js';
 import { graphSummary } from './graphView.js';
 import { chart, extent } from './charts.js';
 
-const KIND_ORDER = ['climb', 'cruise', 'loiter', 'descent', 'reserve'];
+const KIND_ORDER = ['hover', 'climb', 'cruise', 'loiter', 'descent', 'reserve'];
 
 export function renderMission(root, doc) {
-  const graph = new CouplingGraph(fixedWingNodes());
+  const graph = new CouplingGraph(analysisNodes(doc));
   const segs = () => doc.mission.segments;
   let saveTimer = 0;
 
@@ -65,7 +65,7 @@ export function renderMission(root, doc) {
         h('div', { class: 'ms-note' }, packNote())),
       ...list.map((sg, i) => segCard(sg, i, list.length)),
       h('div', { class: 'sec', style: { margin: '14px 0 6px' } }, 'Add a segment'),
-      h('div', { class: 'tr-chips' }, KIND_ORDER.map(k => h('button', { class: 'tg sm', type: 'button', title: SEGMENT_KINDS[k].note, onclick: () => add(k) }, '+ ' + SEGMENT_KINDS[k].label))));
+      h('div', { class: 'tr-chips' }, KIND_ORDER.filter(k => kindsFor(doc.class).includes(k)).map(k => h('button', { class: 'tg sm', type: 'button', title: SEGMENT_KINDS[k].note, onclick: () => add(k) }, '+ ' + SEGMENT_KINDS[k].label))));
   }
   function segCard(sg, i, n) {
     const K = SEGMENT_KINDS[sg.kind];
@@ -118,22 +118,24 @@ export function renderMission(root, doc) {
     const ok = m.feasible, cls = !isFinite(m.margin) || m.margin < 0 ? 'bad' : req && req.status !== 'met' ? 'warn' : 'good';
     const head = h('div', { class: 'pnl pnl-pad tr-head' },
       h('h3', {}, isFinite(m.energy)
-        ? [`Uses `, h('b', { class: 'mono' }, `${fx(m.energy, 0)} Wh`), ` of ${fx(m.usable, 0)} Wh usable · `, h('span', { class: cls }, m.margin >= 0 ? `${fx(m.margin, 1)}% left after the reserve` : `${fx(-m.margin, 1)}% short`)]
+        ? [`Uses `, h('b', { class: 'mono' }, `${fWh(m.energy)}`), ` of ${fWh(m.usable)} usable · `, h('span', { class: cls }, m.margin >= 0 ? `${fx(m.margin, 1)}% left after the reserve` : `${fx(-m.margin, 1)}% short`)]
         : h('span', { class: 'bad' }, `${m.errors.length === 1 ? 'A segment' : m.errors.length + ' segments'} cannot be flown`)),
-      h('p', { class: 'note' }, `${fx(tEnd, 0)} min and ${fx(m.distance, 1)} km in the air, ${fx(m.reserve, 0)} Wh held as reserve; ${fx(m.hotelEnergy, 0)} Wh to the hotel load and ${fx(m.loss, 1)} Wh lost in the pack. `,
+      h('p', { class: 'note' }, `${fx(tEnd, 0)} min and ${fx(m.distance, 1)} km in the air, ${fWh(m.reserve)} held as reserve; ${fWh(m.hotelEnergy)} to the hotel load and ${fWh(m.loss)} lost in the pack. `,
         mass ? `Flown at ${fx(mass.total, 2)} kg. ` : '', req ? `${req.id} (≥ ${req.target}%): ${req.status === 'fail' ? 'failing' : req.status}. ` : '',
         h('a', { href: '#/v/' + doc.id }, 'Change the airframe in the workspace'), ' — the mission follows it.'),
       m.errors.length ? h('ul', { class: 'ms-errors' }, m.errors.map(e => h('li', {}, e))) : null,
       energyBar(m));
 
     // altitude and energy through the flight
-    const zs = m.track.map(p => p.z), left = m.track.map(p => m.usable - p.E);
+    // energy in Wh, or kWh for a big pack
+    const kwh = m.usable >= 2e4, eu = v => (kwh ? v / 1000 : v), eUnit = kwh ? 'kWh' : 'Wh';
+    const zs = m.track.map(p => p.z), left = m.track.map(p => eu(m.usable - p.E));
     const alt = chart({ w: 900, h: 230, x: [0, Math.max(tEnd, 1)], y: [0, Math.max(...zs, 50) * 1.18], xLabel: 'Time (min)', yLabel: m.field ? `Height above the field (m), field ${fx(m.field, 0)} m` : 'Height (m)', label: 'Height through the mission',
       series: [{ pts: m.track.map(p => [p.t / 60, p.z]), cls: 's-accent' }], marks });
-    const yr = extent([...left, 0, m.reserve], 0.06); yr[0] = Math.min(yr[0], 0);
-    const en = chart({ w: 900, h: 230, x: [0, Math.max(tEnd, 1)], y: yr, xLabel: 'Time (min)', yLabel: 'Usable energy left (Wh)', label: 'Battery energy left through the mission',
+    const yr = extent([...left, 0, eu(m.reserve)], 0.06); yr[0] = Math.min(yr[0], 0);
+    const en = chart({ w: 900, h: 230, x: [0, Math.max(tEnd, 1)], y: yr, xLabel: 'Time (min)', yLabel: `Usable energy left (${eUnit})`, label: 'Battery energy left through the mission',
       series: [{ pts: m.track.map((p, k) => [p.t / 60, left[k]]), cls: 's-accent' }], marks,
-      ybands: [{ y0: yr[0], y1: m.reserve, cls: 'band-bad' }], hlines: [{ y: m.reserve, label: `reserve ${fx(m.reserve, 0)} Wh`, cls: 's-target', color: 'var(--bad)' }, { y: 0, cls: 's-warn' }] });
+      ybands: [{ y0: yr[0], y1: eu(m.reserve), cls: 'band-bad' }], hlines: [{ y: eu(m.reserve), label: `reserve ${fWh(m.reserve)}`, cls: 's-target', color: 'var(--bad)' }, { y: 0, cls: 's-warn' }] });
 
     // per segment
     const T = (a, b) => b - a;
@@ -151,9 +153,9 @@ export function renderMission(root, doc) {
             h('td', { class: 'num-c' }, r ? '—' : `${fx(s.x1 - s.x0, 1)} km`),
             h('td', { class: 'num-c' }, s.z0 === s.z1 ? `${fx(s.z0, 0)} m` : `${fx(s.z0, 0)} → ${fx(s.z1, 0)} m`),
             h('td', { class: 'num-c' }, isFinite(s.V) ? `${fx(s.V, 1)} m/s` : '—'),
-            h('td', { class: 'num-c' }, isFinite(s.P) ? `${fx(s.P, 0)} W` : '—'),
-            h('td', { class: 'num-c' }, `${fx(s.E, 0)} Wh`),
-            h('td', { class: 'num-c' }, `${fx(m.usable - used, 0)} Wh`));
+            h('td', { class: 'num-c' }, isFinite(s.P) ? `${fW(s.P)}` : '—'),
+            h('td', { class: 'num-c' }, `${fWh(s.E)}`),
+            h('td', { class: 'num-c' }, `${fWh(m.usable - used)}`));
         });
       })())));
 
@@ -163,9 +165,9 @@ export function renderMission(root, doc) {
       h('div', { class: 'plot-card' }, h('h4', {}, 'Battery energy left', h('span', { class: 'sub' }, 'usable energy; the shaded band is the reserve')), en),
       h('div', { class: 'plot-card' }, h('h4', {}, 'Segments'), table),
       h('div', { class: 'kv' },
-        kv('Flight time', `${fx(tEnd, 0)} min`), kv('Distance flown', `${fx(m.distance, 1)} km`), kv('Energy flown', `${fx(m.flown, 0)} Wh`), kv('Reserve', `${fx(m.reserve, 0)} Wh`),
-        kv('Usable energy', `${fx(m.usable, 0)} Wh`), kv('Peak battery power', `${fx(m.maxPower, 0)} W`),
-        kv('Hotel load energy', `${fx(m.hotelEnergy, 0)} Wh`), kv('Pack losses (I²R)', `${fx(m.loss, 1)} Wh`), kv('Peak current', `${fx(m.maxCurrent, 0)} A`),
+        kv('Flight time', `${fx(tEnd, 0)} min`), kv('Distance flown', `${fx(m.distance, 1)} km`), kv('Energy flown', `${fWh(m.flown)}`), kv('Reserve', `${fWh(m.reserve)}`),
+        kv('Usable energy', `${fWh(m.usable)}`), kv('Peak battery power', `${fW(m.maxPower)}`),
+        kv('Hotel load energy', `${fWh(m.hotelEnergy)}`), kv('Pack losses (I²R)', `${fWh(m.loss)}`), kv('Peak current', `${fx(m.maxCurrent, 0)} A`),
         perf ? kv('Best-endurance speed', `${fx(perf.Vend, 1)} m/s`) : null, perf ? kv('Stall speed, 1 g', `${fx(perf.Vs, 1)} m/s`) : null));
   }
   // the usable energy split by segment, with what is left
@@ -174,9 +176,9 @@ export function renderMission(root, doc) {
     const w = e => (100 * e / total).toFixed(2) + '%';
     const left = isFinite(m.left) ? Math.max(0, m.left) : 0;
     return h('div', { class: 'ms-bar-wrap' },
-      h('div', { class: 'ms-bar', role: 'img', 'aria-label': 'Usable energy by segment: ' + segsE.map(s => `${s.name} ${fx(s.E, 0)} Wh`).join(', ') + `, ${fx(left, 0)} Wh left` },
-        segsE.map(s => h('i', { class: 'k-' + s.kind, style: { width: w(s.E) }, title: `${s.name}: ${fx(s.E, 0)} Wh` })),
-        left > 0 ? h('i', { class: 'ms-left', style: { width: w(left) }, title: `left: ${fx(left, 0)} Wh` }) : null),
+      h('div', { class: 'ms-bar', role: 'img', 'aria-label': 'Usable energy by segment: ' + segsE.map(s => `${s.name} ${fWh(s.E)}`).join(', ') + `, ${fWh(left)} left` },
+        segsE.map(s => h('i', { class: 'k-' + s.kind, style: { width: w(s.E) }, title: `${s.name}: ${fWh(s.E)}` })),
+        left > 0 ? h('i', { class: 'ms-left', style: { width: w(left) }, title: `left: ${fWh(left)}` }) : null),
       h('div', { class: 'ms-legend' }, KIND_ORDER.filter(k => segsE.some(s => s.kind === k)).map(k => h('span', {}, h('span', { class: 'ms-dot k-' + k }), SEGMENT_KINDS[k].label)), left > 0 ? h('span', {}, h('span', { class: 'ms-dot ms-left' }), 'left') : null));
   }
 

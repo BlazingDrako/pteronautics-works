@@ -16,6 +16,7 @@
 // error and the mission has no energy margin.
 import { Perf, atmosphere } from '../adapters/aircraft.js';
 import { SEGMENT_KINDS } from '../model/segments.js';
+import { hoverPower } from './rotors.js';
 
 const STEP = 25;     // m of height per climb or descent step
 
@@ -30,7 +31,7 @@ export function packDraw(P, { voltage = 0, resistance = 0 } = {}) {
 
 // ac: a performance-solver aircraft (perfAircraft); W: weight in N; motorEff: motor + ESC efficiency; usable: Wh;
 // hotel: W drawn all flight; pack: { voltage (V), resistance (Ω) }; field: field elevation (m)
-export function flyMission({ segments, ac, W, motorEff, usable, dT = 0, field = 0, hotel = 0, pack = {} }) {
+export function flyMission({ segments, ac, W, motorEff, usable, dT = 0, field = 0, hotel = 0, pack = {}, rotor = null }) {
   let t = 0, x = 0, z = 0, used = 0, lost = 0, maxI = 0;
   const track = [{ t: 0, x: 0, z, E: 0 }], out = [];
   const air = h => atmosphere(field + h, dT);
@@ -56,6 +57,19 @@ export function flyMission({ segments, ac, W, motorEff, usable, dT = 0, field = 
     const K = SEGMENT_KINDS[sg.kind], E0 = used, L0 = lost;
     const r = { id: sg.id, kind: sg.kind, name: sg.name || K?.label || sg.kind, t0: t, x0: x, z0: z, E: 0, loss: 0, V: NaN, P: NaN, error: null };
     if (!K) { r.error = `unknown segment kind "${sg.kind}"`; }
+    else if (sg.kind === 'hover') {
+      if (!rotor) r.error = 'needs lift rotors';
+      else if (z + sg.climb < -1e-9) r.error = `would end ${Math.round(-(z + sg.climb))} m below the field`;
+      else {
+        const atm = air(z + sg.climb / 2), hp = hoverPower({ rotor, W, rho: atm.rho, a: atm.a, climb: sg.climb / sg.duration });
+        const d = draw(hp.Pel);       // the lift motors' electrical power, plus the hotel load, through the pack
+        if (d.error) r.error = d.error;
+        else {
+          const dt = sg.duration; t += dt; z += sg.climb; used += d.cell * dt / 3600; lost += d.loss * dt / 3600;
+          r.V = 0; r.P = d.P; r.hover = hp; track.push({ t, x, z, E: used });
+        }
+      }
+    }
     else if (sg.kind === 'climb' || sg.kind === 'descent') {
       const up = sg.kind === 'climb', dz = sg.to - z;
       if (up ? dz < 0 : dz > 0) r.error = up ? `starts at ${Math.round(z)} m, above its target ${sg.to} m` : `starts at ${Math.round(z)} m, below its target ${sg.to} m`;

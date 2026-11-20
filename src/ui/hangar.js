@@ -54,6 +54,10 @@ function liveTags(v) {
     const S = w.span * w.rootChord * (1 + w.taper) / 2;
     return [`NACA ${w.rootAirfoil}`, `AR ${fx(w.span * w.span / S, 1)}`, `${fx(v.mission?.climbRate ?? 1.5, 1)} m/s climbs`];
   }
+  if (v.class === 'rotorcraft') {
+    const r = v.components.find(c => c.type === 'rotor'), b = v.components.find(c => c.type === 'battery'), p = v.components.find(c => c.type === 'propulsor');
+    return [r && `${r.count} lift${p ? ' + 1 cruise' : ''}`, r && `rotors ⌀ ${fx(2 * r.radius, 1)} m`, b && `${fx(b.energy / 1000, 0)} kWh`].filter(Boolean);
+  }
   return fixedWingTags(v);
 }
 function fixedWingTags(v) {
@@ -103,7 +107,7 @@ function sidebar() {
     live ? h('a', { class: 'nav-item', href: `#/v/${live.id}/requirements`, title: `The requirements of ${live.name}` }, icon('list'), h('span', {}, 'Requirements')) : planned('list', 'Requirements'),
     live ? h('a', { class: 'nav-item', href: `#/v/${live.id}/trade`, title: `Trade studies on ${live.name}` }, icon('bars'), h('span', {}, 'Trade studies')) : planned('bars', 'Trade studies'),
     h('div', { class: 'nav-group' }, 'Libraries'),
-    planned('airfoil', 'Airfoils'), planned('motor', 'Engines & motors'), planned('grid', 'Materials'), planned('cell', 'Propellants & cells'),
+    ...[['airfoils', 'airfoil', 'Airfoils'], ['motors', 'motor', 'Engines & motors'], ['materials', 'grid', 'Materials'], ['cells', 'cell', 'Propellants & cells']].map(([tab, ic, label]) => h('a', { class: 'nav-item', href: `#/library/${tab}${live ? '?v=' + live.id : ''}` }, icon(ic), h('span', {}, label))),
     h('div', { class: 'nav-group' }, 'Output'),
     live ? h('a', { class: 'nav-item', href: `#/v/${live.id}/report`, title: `The design report of ${live.name}` }, icon('doc'), h('span', {}, 'Reports')) : planned('doc', 'Reports'),
     h('div', { class: 'sidebar-foot' }, themeButton(), h('div', { class: 'sidebar-credit' }, 'Made by Andrew Aguiar · ', h('a', { href: 'https://blazingdrako.github.io/pteronautics/' }, 'Pteronautics'))));

@@ -57,7 +57,7 @@ export async function missionTests(log) {
   // ---------- segments ----------
   ok('segments: the default profile validates', validateSegments(defaultSegments({ altitude: 300, cruiseSpeed: 20 })).length === 0);
   ok('segments: an unknown kind, a value out of range and a duplicate id are caught',
-    validateSegments([{ id: 'a', kind: 'hover' }]).length === 1 && validateSegments([makeSegment('cruise', 'a', { speed: 1 })]).length === 1 && validateSegments([makeSegment('climb', 'a'), makeSegment('reserve', 'a')]).length === 1);
+    validateSegments([{ id: 'a', kind: 'teleport' }]).length === 1 && validateSegments([makeSegment('cruise', 'a', { speed: 1 })]).length === 1 && validateSegments([makeSegment('climb', 'a'), makeSegment('reserve', 'a')]).length === 1);
   ok('segments: new ids do not collide', newSegmentId([{ id: 's1' }, { id: 's3' }]) === 's2' && newSegmentId([{ id: 's1' }, { id: 's2' }]) === 's3');
   ok('segments: a document with a bad segment is refused', (() => { try { const x = clone(base); x.mission.segments[1].speed = -5; fromJSON(JSON.stringify(x)); return false; } catch { return true; } })());
 

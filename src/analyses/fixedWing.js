@@ -8,6 +8,8 @@ import { AirfoilWorker } from '../workers/client.js';
 import { flyMission } from './mission.js';
 
 const DEG = Math.PI / 180;
+// never-exceed speed (EAS) for the performance solver: 40 m/s for small aircraft, else 1.25 × the cruise speed
+export const vneOf = doc => Math.max(40, 1.25 * (doc.mission?.cruiseSpeed ?? 0));
 
 export const AERO_LEVELS = [
   { id: 'llt', label: 'LLT', note: 'Glauert lifting line: straight wings, quick' },
@@ -45,7 +47,7 @@ export function fixedWingNodes({ airfoil = null } = {}) {
         return {
           W, P, wing: w, span: P.b, S: W.S, AR: W.AR, mac: P.mac, cr: P.cr, ct: P.ct, xLE: w.x, xMacLE: w.x + P.xMac, yMac: P.yMac,
           sweepLE: P.sweepLE, ht: ht && { ...A.surfaceOf(ht.area, ht.aspect), x: ht.x, comp: ht }, vt: vt && { ...A.surfaceOf(vt.area, vt.aspect, 0.5), x: vt.x, comp: vt },
-          fus: f ? { L: f.length, d: f.width } : { L: 0, d: 0 }, prop: firstOf(doc, 'propulsor'),
+          fus: f ? { L: f.length, d: f.width, lam: f.laminar || 0 } : { L: 0, d: 0, lam: 0 }, prop: firstOf(doc, 'propulsor'),
           root: A.sectionOf(w.rootAirfoil), tip: A.sectionOf(w.tipAirfoil),
         };
       },
@@ -73,7 +75,7 @@ export function fixedWingNodes({ airfoil = null } = {}) {
       },
     },
     {
-      id: 'aero', label: 'Aero', after: ['geometry', 'atmosphere', 'sections'], reads: ['mission.cruiseSpeed'],
+      id: 'aero', label: 'Aero', after: ['geometry', 'atmosphere', 'sections'], reads: ['mission.cruiseSpeed', 'rotor.count', 'rotor.radius'],
       fidelity: { levels: AERO_LEVELS, value: 'vlm' },
       outputs: ['CLa', 'alphaL0', 'eInv', 'e', 'xac', 'xacAbs', 'Cm0', 'CLmax', 'CD0', 'spanLoad'],
       run({ doc, inputs, fidelity }) {
@@ -91,10 +93,14 @@ export function fixedWingNodes({ airfoil = null } = {}) {
         // the wing: Raymer's turbulent flat plate × form factor, or the viscous sections' minimum drag over the exposed area
         const fixed = [];
         if (visc) fixed.push({ name: 'Wing (viscous section cd,min)', CD: (sec.root.cdmin + sec.tip.cdmin) / 2 * exposed * Math.cos(g.W.sweep * DEG) ** 0.28 });
-        else parts.push({ name: 'Wing', Swet: 2 * g.S * exposed * (1 + 0.2 * g.root.tc), len: g.mac, FF: A.wingFF(g.root.tc, g.W.sweep), Q: 1 });
-        if (g.ht) parts.push({ name: 'Horizontal tail', Swet: 2.04 * g.ht.S, len: g.ht.mac, FF: A.wingFF(0.10, g.ht.comp.sweep), Q: 1.05 });
-        if (g.vt) parts.push({ name: 'Fin', Swet: 2.04 * g.vt.S, len: g.vt.mac, FF: A.wingFF(0.10, g.vt.comp.sweep), Q: 1.05 });
-        if (f.L > 0) parts.push({ name: 'Fuselage', Swet: 0.8 * Math.PI * f.d * f.L, len: f.L, FF: A.bodyFF(f.L / f.d), Q: 1 });
+        else parts.push({ name: 'Wing', Swet: 2 * g.S * exposed * (1 + 0.2 * g.root.tc), len: g.mac, FF: A.wingFF(g.root.tc, g.W.sweep), Q: 1, lam: g.wing.laminar || 0 });
+        if (g.ht) parts.push({ name: 'Horizontal tail', Swet: 2.04 * g.ht.S, len: g.ht.mac, FF: A.wingFF(0.10, g.ht.comp.sweep), Q: 1.05, lam: g.ht.comp.laminar || 0 });
+        if (g.vt) parts.push({ name: 'Fin', Swet: 2.04 * g.vt.S, len: g.vt.mac, FF: A.wingFF(0.10, g.vt.comp.sweep), Q: 1.05, lam: g.vt.comp.laminar || 0 });
+        if (f.L > 0) parts.push({ name: 'Fuselage', Swet: 0.8 * Math.PI * f.d * f.L, len: f.L, FF: A.bodyFF(f.L / f.d), Q: 1, lam: f.lam });
+        // stopped lift rotors (eVTOL): blades, hubs and their share of the booms, as a flat-plate area of 0.012·R² + 0.02 m²
+        // per rotor (about 0.05 m² for a 1.6 m rotor)
+        const lr = firstOf(doc, 'rotor');
+        if (lr) fixed.push({ name: `Stopped lift rotors and booms (${lr.count})`, CD: Math.round(lr.count) * (0.012 * lr.radius ** 2 + 0.02) / g.S });
         const drag = A.zeroLiftDrag({ S: g.S, parts, rePerM, M, fixed });
         return {
           method: lin.method, CLa: lin.CLa, alphaL0: lin.alphaL0, eInv: lin.e, e: A.oswald(lin.e, g.AR, drag.CD0),
@@ -105,13 +111,15 @@ export function fixedWingNodes({ airfoil = null } = {}) {
     },
     {
       id: 'mass', label: 'Mass & balance', detail: 'build-up', after: ['geometry'],
-      reads: ['*.mass', '*.x', 'wing.arealMass'], outputs: ['total', 'xcg', 'h', 'items', 'I'],
+      reads: ['*.mass', '*.x', 'wing.arealMass', 'mission.ballast'], outputs: ['total', 'xcg', 'h', 'items', 'I'],
       run({ doc, inputs }) {
         const g = inputs.geometry, items = [];
         for (const c of doc.components) {
           if (c.type === 'wing') items.push({ id: c.id, name: c.name, mass: c.arealMass * g.S, x: g.xMacLE + 0.4 * g.mac, derived: true });
           else if (typeof c.mass === 'number') items.push({ id: c.id, name: c.name, mass: c.mass, x: c.x ?? 0 });
         }
+        // water ballast (sailplanes) in wing tanks, at the wing's own CG
+        if (doc.mission?.ballast > 0) items.push({ id: 'ballast', name: 'Water ballast', mass: doc.mission.ballast, x: g.xMacLE + 0.4 * g.mac, derived: true });
         const total = items.reduce((s, i) => s + i.mass, 0);
         if (!(total > 0)) throw new Error('total mass is zero');
         const xcg = items.reduce((s, i) => s + i.mass * i.x, 0) / total;
@@ -128,7 +136,7 @@ export function fixedWingNodes({ airfoil = null } = {}) {
         const g = inputs.geometry, ae = inputs.aero, m = inputs.mass, atm = inputs.atmosphere;
         if (!g.ht || !g.vt) throw new Error('needs a horizontal tail and a fin');
         const id = 'works:' + doc.id;
-        const ac = A.perfAircraft(id, { S: g.S, b: g.span, e: ae.e, CD0: ae.CD0, CLa: ae.CLa, CLmax: ae.CLmax, mass: m.total, power: g.prop ? g.prop.power : 0, propEff: g.prop ? g.prop.propEff : 0.8 });
+        const ac = A.perfAircraft(id, { S: g.S, b: g.span, e: ae.e, CD0: ae.CD0, CLa: ae.CLa, CLmax: ae.CLmax, mass: m.total, power: g.prop ? g.prop.power : 0, propEff: g.prop ? g.prop.propEff : 0.8, vne: vneOf(doc) });
         const geom = {
           c: g.mac, sweep: g.W.sweep, taper: g.W.taper, dihedral: g.W.dihedral, wing: g.wing.position, L: g.fus.L, wf: g.fus.d, xw: g.fus.L ? (g.xLE + g.cr / 4) / g.fus.L : 0.3,
           ht: { S: g.ht.S, AR: g.ht.AR, l: g.ht.x - ae.xacAbs, eta: g.ht.comp.efficiency, tau: g.ht.comp.tau, sweep: g.ht.comp.sweep },
@@ -155,7 +163,7 @@ export function fixedWingNodes({ airfoil = null } = {}) {
         const g = inputs.geometry, ae = inputs.aero, m = inputs.mass, atm = inputs.atmosphere.cruise;
         const prop = firstOf(doc, 'propulsor'), bat = firstOf(doc, 'battery');
         if (!prop || !bat) throw new Error('needs a motor and a battery');
-        const ac = A.perfAircraft('works:' + doc.id, { S: g.S, b: g.span, e: ae.e, CD0: ae.CD0, CLa: ae.CLa, CLmax: ae.CLmax, mass: m.total, power: prop.power, propEff: prop.propEff });
+        const ac = A.perfAircraft('works:' + doc.id, { S: g.S, b: g.span, e: ae.e, CD0: ae.CD0, CLa: ae.CLa, CLmax: ae.CLmax, mass: m.total, power: prop.power, propEff: prop.propEff, vne: vneOf(doc) });
         const W = m.total * A.G0, sp = A.Perf.speeds(ac, atm, W, 'max');
         const st = V => A.Perf.state(ac, atm, V, W, 'max');
         const etaProp = V => prop.propEff * Math.tanh(Math.max(V, 1e-3) / ac.Vstar);
@@ -182,15 +190,15 @@ export function fixedWingNodes({ airfoil = null } = {}) {
     {
       // The mission profile (doc.mission.segments) flown segment by segment: time, distance and battery energy
       id: 'mission', label: 'Mission', detail: 'profile', after: ['geometry', 'aero', 'mass', 'atmosphere'],
-      reads: ['mission.segments', 'mission.dT', 'mission.fieldElevation', 'mission.hotelPower', 'propulsor.*', 'battery.*'],
+      reads: ['mission.segments', 'mission.dT', 'mission.fieldElevation', 'mission.hotelPower', 'propulsor.*', 'battery.*', 'rotor.*'],
       outputs: ['segments', 'track', 'energy', 'usable', 'margin', 'duration', 'distance', 'feasible'],
       run({ doc, inputs }) {
         const g = inputs.geometry, ae = inputs.aero, m = inputs.mass;
         const prop = firstOf(doc, 'propulsor'), bat = firstOf(doc, 'battery');
         if (!prop || !bat) throw new Error('needs a motor and a battery');
-        const ac = A.perfAircraft('works:' + doc.id, { S: g.S, b: g.span, e: ae.e, CD0: ae.CD0, CLa: ae.CLa, CLmax: ae.CLmax, mass: m.total, power: prop.power, propEff: prop.propEff });
+        const ac = A.perfAircraft('works:' + doc.id, { S: g.S, b: g.span, e: ae.e, CD0: ae.CD0, CLa: ae.CLa, CLmax: ae.CLmax, mass: m.total, power: prop.power, propEff: prop.propEff, vne: vneOf(doc) });
         return flyMission({ segments: doc.mission.segments || [], ac, W: m.total * A.G0, motorEff: prop.motorEff, usable: bat.energy * bat.usable, dT: doc.mission.dT ?? 0,
-          field: doc.mission.fieldElevation ?? 0, hotel: doc.mission.hotelPower ?? 0, pack: { voltage: bat.voltage, resistance: bat.resistance } });
+          field: doc.mission.fieldElevation ?? 0, hotel: doc.mission.hotelPower ?? 0, pack: { voltage: bat.voltage, resistance: bat.resistance }, rotor: firstOf(doc, 'rotor') || null });
       },
     },
     {

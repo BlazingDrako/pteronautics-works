@@ -15,7 +15,7 @@ export function modelTests(log) {
   ok('Kestrel is fixed-wing with a 3.2 m NACA 4415 wing', k.class === 'fixed-wing' && w.span === 3.2 && w.rootAirfoil === '4415', `${k.class}, b ${w.span}, ${w.rootAirfoil}`);
   const S = w.span * w.rootChord * (1 + w.taper) / 2, m = V.pointMass(k) + w.arealMass * S;
   ok('Kestrel takeoff mass is about 22.5 kg', Math.abs(m - 22.5) < 0.5, `${m.toFixed(2)} kg`);
-  ok('fixed-wing and sailplanes are marked implemented, the rest not', Object.entries(V.VEHICLE_CLASSES).every(([c, d]) => d.implemented === (c === 'fixed-wing' || c === 'sailplane')));
+  ok('fixed-wing, sailplanes and eVTOL are marked implemented, the rest not', Object.entries(V.VEHICLE_CLASSES).every(([c, d]) => d.implemented === ['fixed-wing', 'sailplane', 'rotorcraft'].includes(c)));
   ok('every class lists only known component types', Object.values(V.VEHICLE_CLASSES).every(c => c.types.every(t => V.COMPONENT_TYPES[t])));
 
   // ---- components ----

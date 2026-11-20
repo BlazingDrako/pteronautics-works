@@ -1,6 +1,7 @@
 // Top view of a fixed-wing vehicle, to scale: nose up, span across. World coordinates: x aft from the nose (m),
 // y to starboard (m). Used on the hangar cards and, large and data-coloured, as the workspace's centrepiece.
 import { s, fx } from './dom.js';
+import { rotorLayout } from '../analyses/rotors.js';
 import { firstOf } from '../model/vehicle.js';
 import { wingOf, surfaceOf, Wing } from '../adapters/aircraft.js';
 
@@ -23,8 +24,10 @@ export function airframe(doc) {
   if (vt) { const t = surfaceOf(vt.area, vt.aspect, 0.5); fin = { x0: vt.x - t.mac / 4, c: t.cr }; }
   const L = f ? f.length : 0, d = f ? f.width : 0;
   const xs = [0, L, ...wingPoly.map(p => p[0]), ...(tail ? tail.poly.map(p => p[0]) : []), ...(fin ? [fin.x0, fin.x0 + fin.c] : []), pr ? pr.x - 0.05 : 0];
-  const ys = [...wingPoly.map(p => p[1]), ...(tail ? tail.poly.map(p => p[1]) : []), pr ? pr.diameter / 2 : 0];
-  return { W, P, w, le, ch, wingPoly, tail, fin, L, d, prop: pr, xMin: Math.min(...xs), xMax: Math.max(...xs), yMax: Math.max(...ys.map(Math.abs)) };
+  const rotors = rotorLayout(doc);
+  for (const r of rotors) xs.push(r.x - r.R, r.x + r.R);
+  const ys = [...wingPoly.map(p => p[1]), ...(tail ? tail.poly.map(p => p[1]) : []), pr ? pr.diameter / 2 : 0, ...rotors.map(r => Math.abs(r.y) + r.R)];
+  return { W, P, w, le, ch, wingPoly, tail, fin, L, d, prop: pr, rotors, xMin: Math.min(...xs), xMax: Math.max(...xs), yMax: Math.max(...ys.map(Math.abs)) };
 }
 
 // half-width of the fuselage at x: rounded nose, parallel cabin, tapering boom
@@ -190,6 +193,19 @@ export function planformShapes(svg, doc, box, { detail = true, clMap = null, com
       for (const sg of [-1, 1]) svg.append(s('path', { d: path(blade(sg)), class: 'pf-blade', style: `stroke-width:${compact ? 1.4 : 2.6}` }));
     }
     svg.append(s('ellipse', { cx: px, cy: py + 0.012 * k, rx: Math.max(2, 0.03 * k), ry: Math.max(2.5, 0.045 * k), class: 'pf-spinner' }));
+  }
+  // ---- lift rotors (eVTOL): a boom through each pair, and the discs ----
+  if (A.rotors.length) {
+    const booms = new Map();
+    for (const r of A.rotors) { const key = r.side + ':' + r.boom; if (!booms.has(key)) booms.set(key, []); booms.get(key).push(r); }
+    for (const rs of booms.values()) {
+      const x0 = Math.min(...rs.map(r => r.x)), x1 = Math.max(...rs.map(r => r.x)), [ax, ay] = T(x0, rs[0].y), [bx, by] = T(x1, rs[0].y);
+      svg.append(s('line', { x1: ax, y1: ay, x2: bx, y2: by, class: 'pf-boom', style: `stroke-width:${Math.max(1.5, 0.12 * k)}` }));
+    }
+    for (const r of A.rotors) {
+      const [rx, ry] = T(r.x, r.y);
+      svg.append(s('circle', { cx: rx, cy: ry, r: r.R * k, class: 'pf-rotor' }), s('circle', { cx: rx, cy: ry, r: Math.max(1.5, 0.1 * k), class: 'pf-hub' }));
+    }
   }
   return { A, T, k };
 }
