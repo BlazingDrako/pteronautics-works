@@ -37,7 +37,7 @@ The site is the repository itself, served as static files:
 - `/` is the landing page (`index.html`, `site/`). Its figures are live, built from the same modules as the app: Kestrel solved by the coupling graph and drawn in 3D, sliders that drive the real graph, an mfoil run for the airfoil lab, and the thin-airfoil against viscous comparison computed in a worker.
 - `/app/` is Works itself, and `/tests/` the test page.
 
-`.github/workflows/pages.yml` publishes it to GitHub Pages on every push to `main`. Turn it on once under **Settings → Pages → Source: GitHub Actions**; the site then lives at https://blazingdrako.github.io/pteronautics-works/.
+GitHub Pages serves it straight from the `main` branch (Settings → Pages → Deploy from a branch: `main`, root), the same way as Atlas; `.nojekyll` makes Pages serve the files as they are. Every push to `main` updates https://blazingdrako.github.io/pteronautics-works/.
 
 ## Tests
 
