@@ -201,13 +201,14 @@ export function fixedWingNodes({ airfoil = null } = {}) {
       id: 'mission', label: 'Mission', detail: 'profile', after: ['geometry', 'aero', 'mass', 'atmosphere'],
       reads: ['mission.segments', 'mission.dT', 'mission.fieldElevation', 'mission.hotelPower', 'propulsor.*', 'battery.*', 'rotor.*'],
       outputs: ['segments', 'track', 'energy', 'usable', 'margin', 'duration', 'distance', 'feasible'],
-      run({ doc, inputs }) {
+      run({ doc, inputs, rotorFM }) {
         const g = inputs.geometry, ae = inputs.aero, m = inputs.mass;
         const prop = firstOf(doc, 'propulsor'), bat = firstOf(doc, 'battery');
         if (!prop || !bat) throw new Error('needs a motor and a battery');
+        const lift = firstOf(doc, 'rotor'), rotor = lift ? { ...lift, figureOfMerit: rotorFM ?? lift.figureOfMerit } : null;
         const ac = A.perfAircraft('works:' + doc.id, { S: g.S, b: g.span, e: ae.e, CD0: ae.CD0, CLa: ae.CLa, CLmax: ae.CLmax, mass: m.total, power: prop.power, propEff: prop.propEff, vne: vneOf(doc) });
         return flyMission({ segments: doc.mission.segments || [], ac, W: m.total * A.G0, motorEff: prop.motorEff, usable: bat.energy * bat.usable, dT: doc.mission.dT ?? 0,
-          field: doc.mission.fieldElevation ?? 0, hotel: doc.mission.hotelPower ?? 0, pack: { voltage: bat.voltage, resistance: bat.resistance }, rotor: firstOf(doc, 'rotor') || null });
+          field: doc.mission.fieldElevation ?? 0, hotel: doc.mission.hotelPower ?? 0, pack: { voltage: bat.voltage, resistance: bat.resistance }, rotor });
       },
     },
     {

@@ -73,7 +73,7 @@ export function concepts() {
         C('wing', 'wing', { name: 'Wing', span: 12, rootChord: 1.8, taper: 0.7, sweep: 0, twist: -2, dihedral: 2, rootAirfoil: '4415', tipAirfoil: '4412', x: 3.3, position: 'high', arealMass: 9, skinMass: 8.0 }),
         C('htail', 'htail', { name: 'Horizontal tail', area: 3.2, aspect: 4.5, sweep: 10, x: 7.7, efficiency: 0.9, tau: 0.5, mass: 30 }),
         C('vtail', 'vtail', { name: 'Fin & rudder', area: 1.9, aspect: 1.5, sweep: 30, x: 7.8, height: 0.9, mass: 20 }),
-        C('rotor', 'rotor', { name: 'Lift rotors & booms', count: 4, radius: 1.6, blades: 3, tipSpeed: 160, figureOfMerit: 0.72, motorEff: 0.92, mass: 190, x: 3.9 }),
+        C('rotor', 'rotor', { name: 'Lift rotors & booms', count: 4, radius: 1.6, blades: 3, tipSpeed: 160, figureOfMerit: 0.72, solidity: 0.14, twist: -12, motorEff: 0.92, mass: 190, x: 3.9 }),
         C('propulsor', 'propulsor', { name: 'Cruise motor & pusher prop', power: 160000, propEff: 0.84, motorEff: 0.94, diameter: 2.1, mass: 45, x: 8.1 }),
         C('battery', 'battery', { name: 'Battery 92 kWh', energy: 92000, usable: 0.9, chemistry: 'Li-ion NMC', mass: 520, x: 2.9, voltage: 800, resistance: 0.05 }),
         C('payload', 'payload', { name: 'Pilot & 3 passengers', description: 'Four occupants with baggage', mass: 400, x: 2.9 }),

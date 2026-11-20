@@ -70,7 +70,7 @@ export const COMPONENT_TYPES = {
   systems: { label: 'Systems', params: [t('description', 'Description', ''), ...massX(1.8, 0.7)] },
   // ---------- rotorcraft & eVTOL ----------
   rotor: { label: 'Lift rotors', params: [n('count', 'Count', '', 4, 1, 16, 1), n('radius', 'Radius', 'm', 1, 0.05, 20, 0.01), n('blades', 'Blades', '', 3, 2, 8, 1), n('tipSpeed', 'Tip speed', 'm/s', 180, 50, 250, 1),
-    n('figureOfMerit', 'Figure of merit', '', 0.72, 0.4, 0.85, 0.01), n('motorEff', 'Motor + ESC efficiency', '', 0.9, 0.5, 0.99, 0.01), n('mass', 'Mass (all rotors, booms)', 'kg', 20, 0, 5000, 0.05), n('x', 'Position x (CG)', 'm', 1, -50, 200, 0.01)] },
+    n('figureOfMerit', 'Figure of merit (momentum)', '', 0.72, 0.4, 0.85, 0.01), n('solidity', 'Solidity σ (blade element)', '', 0.1, 0.03, 0.3, 0.005), n('twist', 'Blade twist, root to tip (blade element)', '°', -10, -25, 5, 0.5), n('motorEff', 'Motor + ESC efficiency', '', 0.9, 0.5, 0.99, 0.01), n('mass', 'Mass (all rotors, booms)', 'kg', 20, 0, 5000, 0.05), n('x', 'Position x (CG)', 'm', 1, -50, 200, 0.01)] },
   // ---------- high-speed ----------
   inlet: { label: 'Inlet', params: [c('kind', 'Kind', '2-ramp', ['pitot', '2-ramp', '3-ramp', 'axisymmetric']), n('designMach', 'Design Mach', '', 1.6, 0.5, 4, 0.05), ...massX(120, 5)] },
   turbofan: { label: 'Turbofan', params: [n('thrust', 'Max thrust (dry)', 'N', 60e3, 100, 5e5, 100), n('bypass', 'Bypass ratio', '', 0.6, 0, 12, 0.1), c('afterburner', 'Afterburner', 'yes', ['yes', 'no']), ...massX(1400, 10)] },

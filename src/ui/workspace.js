@@ -8,6 +8,7 @@ import { noteEdit, recordStatuses, describeEdit } from '../model/history.js';
 import { CouplingGraph } from '../engine/graph.js';
 import { AERO_LEVELS, SECTION_LEVELS, STRUCTURE_LEVELS } from '../analyses/fixedWing.js';
 import { analysisNodes } from '../analyses/classes.js';
+import { HOVER_LEVELS } from '../analyses/rotors.js';
 import { vehicleView } from './planform.js';
 import { mountView3d, defaultCamera } from './view3d.js';
 import { createAirfoilLab } from './airfoilLab.js';
@@ -402,11 +403,17 @@ export function renderWorkspace(root, doc) {
       missionCard(out));
   }
   function hoverCard(hv) {
-    return h('div', { class: 'plot-card' }, h('h4', {}, 'Hover on the lift rotors', h('span', { class: 'sub' }, 'momentum theory · figure of merit')),
+    const bem = hv.method === 'bem';
+    const blade = bem ? chart({ w: 900, h: 200, x: [0, 1], y: [0, Math.max(...hv.span.map(e => e.dTdr)) * 1.1], xLabel: 'Radius r/R', yLabel: 'Thrust per metre (N/m)', label: 'Thrust along the blade in hover',
+      series: [{ pts: hv.span.map(e => [e.x, e.dTdr]), cls: 's-accent' }] }) : null;
+    return h('div', { class: 'plot-card' }, h('h4', {}, 'Hover on the lift rotors', h('span', { class: 'sub' }, bem ? 'blade element momentum · Prandtl tip loss' : 'momentum theory · figure of merit')),
       h('div', { class: 'kv' },
         kv('Battery power to hover', `${fx(hv.kW, 0)} kW`), kv('Shaft power', `${fx(hv.P / 1000, 0)} kW (${fx(hv.perRotor / 1000, 0)} kW per rotor)`),
         kv('Disk loading', `${fx(hv.diskLoadingKg, 1)} kg/m²`), kv('Induced velocity', `${fx(hv.vh, 1)} m/s`),
-        kv('Power loading', `${fx(hv.powerLoading * 1000 / 9.80665, 1)} kg/kW`), kv('Tip Mach', fx(hv.tipMach, 2))),
+        kv('Power loading', `${fx(hv.powerLoading * 1000 / 9.80665, 1)} kg/kW`), kv('Tip Mach', fx(hv.tipMach, 2)),
+        kv('Figure of merit', `${fx(hv.FM, 3)}${bem ? '' : ' (set)'}`), kv('Blade loading C_T/σ', fx(hv.CTsigma, 3)),
+        bem ? kv('Collective (trimmed)', `${fx(hv.collective, 1)}°`) : null, bem ? kv('Blade stalled', `${fx(hv.stalled * 100, 0)}% of the span`) : null),
+      blade,
       h('p', { class: 'note', style: { marginTop: '8px' } }, `At the field, ${hv.n} rotors of ${fx(hv.A / hv.n, 2)} m² each. Hover and transition are flown as hover segments in the mission planner.`));
   }
   function missionCard(out) {
@@ -474,6 +481,7 @@ export function renderWorkspace(root, doc) {
       h('span', {}, 'Sections'), h('span', { class: 'opts' }, SECTION_LEVELS.map(l => opt(l.label, graph.nodes.get('sections').fidelity.value === l.id, () => { graph.setFidelity('sections', l.id); paintFidelity(); run(); }, false, l.note))),
       h('span', {}, 'Stability'), h('span', { class: 'opts' }, opt('linear (Nelson)', true)),
       h('span', {}, 'Performance'), h('span', { class: 'opts' }, opt('point mass', true)),
+      ...(graph.nodes.get('hover') ? [h('span', {}, 'Hover'), h('span', { class: 'opts' }, HOVER_LEVELS.map(l => opt(l.label, graph.nodes.get('hover').fidelity.value === l.id, () => { graph.setFidelity('hover', l.id); paintFidelity(); run(); }, false, l.note)))] : []),
       h('span', {}, 'Structure'), h('span', { class: 'opts' }, STRUCTURE_LEVELS.map(l => opt(l.label, graph.nodes.get('mass').fidelity.value === l.id, () => { graph.setFidelity('mass', l.id); paintFidelity(); run(); }, false, l.note))));
     const sl = SECTION_LEVELS.find(l => l.id === graph.nodes.get('sections').fidelity.value);
     const stl = STRUCTURE_LEVELS.find(l => l.id === graph.nodes.get('mass').fidelity.value);

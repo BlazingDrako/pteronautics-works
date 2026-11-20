@@ -12,6 +12,7 @@ import { firstOf } from '../model/vehicle.js';
 import { wingOf, surfaceOf, Wing } from '../adapters/aircraft.js';
 import { nacaPanels } from '../../core/solvers/airfoilTheory.js';
 import { bodyHalf, rampColor } from './planform.js';
+import { rotorLayout } from '../analyses/rotors.js';
 
 const DEG = Math.PI / 180;
 
@@ -109,13 +110,14 @@ export function buildMesh(doc, out = {}, { clMap = null } = {}) {
     faces.push({ p: rings[last].slice(0, -1), part: 'body', wire: rings[last].slice(0, -1).map(() => 0) });
   }
 
-  // ---- propeller: spinner cone and two blades (tractor at the nose) ----
+  // ---- propeller: spinner cone and two blades (a tractor at the nose, or a pusher behind the tail) ----
   let prop = null;
   if (pr) {
-    const R = pr.diameter / 2, xp = Math.min(pr.x, 0.02) - 0.03, sr = Math.max(0.025, d * 0.22), M = 14;
+    const Lf = f ? f.length : 0, pusher = Lf > 0 && pr.x > Lf / 2;
+    const R = pr.diameter / 2, xp = pusher ? Math.max(pr.x, Lf) + 0.03 : Math.min(pr.x, 0.02) - 0.03, sr = Math.max(0.025, d * 0.22), M = 14, tipX = pusher ? xp + sr * 1.6 : xp - sr * 1.6;
     for (let k = 0; k < M; k++) {
       const a0 = k / M * 2 * Math.PI, a1 = (k + 1) / M * 2 * Math.PI;
-      faces.push({ p: [[xp - sr * 1.6, 0, 0], [xp, sr * Math.cos(a0), sr * Math.sin(a0)], [xp, sr * Math.cos(a1), sr * Math.sin(a1)]], part: 'spinner', wire: [k % 2 ? 0 : 1, 2, 0] });
+      faces.push({ p: [[tipX, 0, 0], [xp, sr * Math.cos(a0), sr * Math.sin(a0)], [xp, sr * Math.cos(a1), sr * Math.sin(a1)]], part: 'spinner', wire: [k % 2 ? 0 : 1, 2, 0] });
     }
     for (const sg of [1, -1]) {
       const bl = [];
@@ -126,10 +128,30 @@ export function buildMesh(doc, out = {}, { clMap = null } = {}) {
     prop = { x: xp, R };
   }
 
+  // ---- lift rotors (eVTOL): square booms under the wing, a mast and two blades per rotor; the discs are drawn later ----
+  const rotors = [];
+  for (const rr of rotorLayout(doc)) {
+    const z = zRoot + rr.R * 0.12, mast = 0.06 * rr.R;
+    // two blades, crossing at the hub
+    for (const a of [0.35, 0.35 + Math.PI]) {
+      const tip = [rr.x + rr.R * Math.cos(a), rr.y + rr.R * Math.sin(a), z], cw = 0.07 * rr.R, nx = -Math.sin(a) * cw, ny = Math.cos(a) * cw;
+      faces.push({ p: [[rr.x + nx, rr.y + ny, z], [tip[0] + nx * 0.5, tip[1] + ny * 0.5, z], [tip[0] - nx * 0.5, tip[1] - ny * 0.5, z], [rr.x - nx, rr.y - ny, z]], part: 'blade', wire: [2, 2, 2, 2] });
+    }
+    faces.push({ p: [[rr.x - mast, rr.y, zRoot], [rr.x + mast, rr.y, zRoot], [rr.x + mast, rr.y, z], [rr.x - mast, rr.y, z]], part: 'body', wire: [1, 1, 1, 1] });
+    rotors.push({ x: rr.x, y: rr.y, z, R: rr.R });
+  }
+  const boomsBy = new Map();
+  for (const rr of rotorLayout(doc)) { const k = rr.side + ':' + rr.boom; if (!boomsBy.has(k)) boomsBy.set(k, []); boomsBy.get(k).push(rr); }
+  for (const rs of boomsBy.values()) {
+    const x0 = Math.min(...rs.map(r => r.x)) - 0.1 * rs[0].R, x1 = Math.max(...rs.map(r => r.x)) + 0.1 * rs[0].R, y = rs[0].y, bw = 0.04 * rs[0].R + 0.02, z0 = zRoot - bw;
+    const c = [[-bw, -bw], [bw, -bw], [bw, bw], [-bw, bw]];
+    for (let k = 0; k < 4; k++) { const [a, b] = [c[k], c[(k + 1) % 4]]; faces.push({ p: [[x0, y + a[0], z0 + a[1]], [x1, y + a[0], z0 + a[1]], [x1, y + b[0], z0 + b[1]], [x0, y + b[0], z0 + b[1]]], part: 'body', wire: [1, 0, 1, 0] }); }
+  }
+
   // ---- bounds and anchors for markers ----
   let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (const fc of faces) for (const q of fc.p) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], q[k]); hi[k] = Math.max(hi[k], q[k]); }
-  const anchors = { zWing: zRoot, wingLE: eta => [w.x + P.xle(eta), eta * P.s, zRoot + eta * P.s * tanG], chord: eta => P.chord(eta), s: P.s, prop };
+  const anchors = { zWing: zRoot, wingLE: eta => [w.x + P.xle(eta), eta * P.s, zRoot + eta * P.s * tanG], chord: eta => P.chord(eta), s: P.s, prop, rotors };
   return { faces, bounds: { lo, hi, c: lo.map((v, k) => (v + hi[k]) / 2), size: Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) }, anchors, W, P };
 }
 
@@ -288,6 +310,13 @@ export function mountView3d(holder, doc, out, layers, cam, { onCamera, reserveRi
       for (let i = 0; i <= 48; i++) { const a = i / 48 * 2 * Math.PI, s = P([x - 0.01, R * Math.cos(a), R * Math.sin(a)]); i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); }
       ctx.fillStyle = dark ? 'rgba(255,122,107,.07)' : 'rgba(217,72,59,.06)'; ctx.fill();
       ctx.strokeStyle = dark ? 'rgba(255,122,107,.35)' : 'rgba(217,72,59,.35)'; ctx.lineWidth = 1; ctx.stroke();
+    }
+    // lift rotor discs, horizontal
+    for (const r of mesh.anchors.rotors || []) {
+      ctx.beginPath();
+      for (let i = 0; i <= 48; i++) { const a = i / 48 * 2 * Math.PI, s = P([r.x + r.R * Math.cos(a), r.y + r.R * Math.sin(a), r.z]); i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); }
+      ctx.fillStyle = dark ? 'rgba(58,160,216,.08)' : 'rgba(22,119,179,.07)'; ctx.fill();
+      ctx.setLineDash([4, 3]); ctx.strokeStyle = dark ? 'rgba(58,160,216,.6)' : 'rgba(22,119,179,.55)'; ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
     }
 
     const accent = cssVar('--accent') || '#1677b3', hl = cssVar('--hl') || '#d9483b', text = cssVar('--text') || '#111', text2 = cssVar('--text-2') || '#555';

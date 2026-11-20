@@ -8,6 +8,9 @@ function evtolNodes(options) {
   const nodes = fixedWingNodes(options), i = nodes.findIndex(n => n.id === 'requirements');
   nodes.splice(i, 0, hoverNode());
   nodes[nodes.length - 1] = { ...nodes[nodes.length - 1], after: [...nodes[nodes.length - 1].after, 'hover'] };
+  // the mission's hover segments fly at the Hover node's figure of merit (fixed, or the blade-element one)
+  const m = nodes.findIndex(n => n.id === 'mission'), mission = nodes[m];
+  nodes[m] = { ...mission, after: [...mission.after, 'hover'], run: args => mission.run({ ...args, rotorFM: args.inputs.hover?.FM }) };
   return nodes;
 }
 
