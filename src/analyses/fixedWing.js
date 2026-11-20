@@ -3,6 +3,8 @@
 import { firstOf } from '../model/vehicle.js';
 import { evaluateRequirements } from './requirements.js';
 import * as A from '../adapters/aircraft.js';
+import { reBin, NPANEL } from '../adapters/airfoil.js';
+import { AirfoilWorker } from '../workers/client.js';
 
 const DEG = Math.PI / 180;
 
@@ -12,7 +14,16 @@ export const AERO_LEVELS = [
   { id: 'vlm-stall', label: 'VLM + stall', note: 'Adds the nonlinear strip loop for CL,max and where the stall starts' },
 ];
 
-export function fixedWingNodes() {
+export const SECTION_LEVELS = [
+  { id: 'thin', label: 'thin airfoil', note: 'Thin-airfoil zero lift and moment, handbook cℓ,max, fully turbulent wing skin friction' },
+  { id: 'viscous', label: 'viscous', note: 'mfoil viscous panel polars at the wing\'s Reynolds number: cℓ,max and the wing\'s profile drag (free transition, Ncrit 9)' },
+];
+
+// one worker for the graph's polars, shared by every workspace (it caches sweeps)
+let sharedWorker = null;
+const graphWorker = () => (sharedWorker = sharedWorker || new AirfoilWorker());
+
+export function fixedWingNodes({ airfoil = null } = {}) {
   return [
     {
       id: 'atmosphere', label: 'Atmosphere', detail: 'ISA 1976',
@@ -39,23 +50,51 @@ export function fixedWingNodes() {
       },
     },
     {
-      id: 'aero', label: 'Aero', after: ['geometry', 'atmosphere'], reads: ['mission.cruiseSpeed'],
+      // Section data for the wing's root and tip airfoils. 'thin': thin-airfoil theory and a handbook cℓ,max (instant).
+      // 'viscous': an mfoil polar per airfoil at the Reynolds number of the mean chord, run in the airfoil worker.
+      id: 'sections', label: 'Sections', after: ['geometry', 'atmosphere'], reads: ['mission.cruiseSpeed'],
+      fidelity: { levels: SECTION_LEVELS, value: 'thin' },
+      outputs: ['method', 'root', 'tip', 'viscous'],
+      run({ doc, inputs, fidelity }) {
+        const g = inputs.geometry, atm = inputs.atmosphere.cruise, V = doc.mission.cruiseSpeed;
+        if (fidelity !== 'viscous') return { method: 'thin airfoil', viscous: false, root: g.root, tip: g.tip };
+        const Re = reBin(atm.rho * V * g.mac / atm.mu), Ma = Math.round(V / atm.a * 100) / 100;
+        const codes = [...new Set([g.root.code, g.tip.code])];
+        const worker = airfoil || graphWorker();
+        return Promise.all(codes.map(code => worker.polar({ code, Re, Ma, ncrit: 9, npanel: NPANEL }))).then(polars => {
+          const sec = base => {
+            const pol = polars[codes.indexOf(base.code)];
+            if (!isFinite(pol.clmax) || !isFinite(pol.cdmin)) throw new Error(`the NACA ${base.code} polar did not converge at Re ${Math.round(Re / 1e3)}k`);
+            return { ...base, clmax: pol.clmax, cdmin: pol.cdmin, alpha0Visc: pol.alpha0, polar: pol, Re };
+          };
+          return { method: 'mfoil viscous', viscous: true, root: sec(g.root), tip: sec(g.tip), Re };
+        });
+      },
+    },
+    {
+      id: 'aero', label: 'Aero', after: ['geometry', 'atmosphere', 'sections'], reads: ['mission.cruiseSpeed'],
       fidelity: { levels: AERO_LEVELS, value: 'vlm' },
       outputs: ['CLa', 'alphaL0', 'eInv', 'e', 'xac', 'xacAbs', 'Cm0', 'CLmax', 'CD0', 'spanLoad'],
       run({ doc, inputs, fidelity }) {
         const g = inputs.geometry, atm = inputs.atmosphere.cruise, V = doc.mission.cruiseSpeed, M = V / atm.a;
+        const sec = inputs.sections, visc = sec.viscous;
         const lin = A.wingAero(g.W, { M, method: fidelity === 'llt' ? 'llt' : 'vlm' });
-        // CL,max: handbook 0.9·cl,max·cos Λ for the linear levels, the nonlinear strip loop for 'vlm-stall'
-        let CLmax = 0.9 * Math.min(g.root.clmax, g.tip.clmax) * Math.cos(g.W.sweep * DEG), stall = null, clSource = 'handbook 0.9·cℓ,max';
-        if (fidelity === 'vlm-stall') { stall = A.wingStall(g.W, { M }); CLmax = stall.CLmax; clSource = 'nonlinear strips'; }
+        // CL,max: 0.9·cl,max·cos Λ for the linear levels, the nonlinear strip loop for 'vlm-stall'; the section
+        // cl,max is the handbook value or, with viscous sections, the peak of the mfoil polar
+        let CLmax = 0.9 * Math.min(sec.root.clmax, sec.tip.clmax) * Math.cos(g.W.sweep * DEG), stall = null;
+        let clSource = visc ? 'viscous 0.9·cℓ,max' : 'handbook 0.9·cℓ,max';
+        if (fidelity === 'vlm-stall') { stall = A.wingStall(g.W, { M, sections: { root: sec.root, tip: sec.tip } }); CLmax = stall.CLmax; clSource = visc ? 'strips + viscous cℓ,max' : 'nonlinear strips'; }
         // parasite drag
         const rePerM = atm.rho * V / atm.mu, f = g.fus, parts = [];
         const exposed = Math.max(0, 1 - f.d / g.span);
-        parts.push({ name: 'Wing', Swet: 2 * g.S * exposed * (1 + 0.2 * g.root.tc), len: g.mac, FF: A.wingFF(g.root.tc, g.W.sweep), Q: 1 });
+        // the wing: Raymer's turbulent flat plate × form factor, or the viscous sections' minimum drag over the exposed area
+        const fixed = [];
+        if (visc) fixed.push({ name: 'Wing (viscous section cd,min)', CD: (sec.root.cdmin + sec.tip.cdmin) / 2 * exposed * Math.cos(g.W.sweep * DEG) ** 0.28 });
+        else parts.push({ name: 'Wing', Swet: 2 * g.S * exposed * (1 + 0.2 * g.root.tc), len: g.mac, FF: A.wingFF(g.root.tc, g.W.sweep), Q: 1 });
         if (g.ht) parts.push({ name: 'Horizontal tail', Swet: 2.04 * g.ht.S, len: g.ht.mac, FF: A.wingFF(0.10, g.ht.comp.sweep), Q: 1.05 });
         if (g.vt) parts.push({ name: 'Fin', Swet: 2.04 * g.vt.S, len: g.vt.mac, FF: A.wingFF(0.10, g.vt.comp.sweep), Q: 1.05 });
         if (f.L > 0) parts.push({ name: 'Fuselage', Swet: 0.8 * Math.PI * f.d * f.L, len: f.L, FF: A.bodyFF(f.L / f.d), Q: 1 });
-        const drag = A.zeroLiftDrag({ S: g.S, parts, rePerM, M });
+        const drag = A.zeroLiftDrag({ S: g.S, parts, rePerM, M, fixed });
         return {
           method: lin.method, CLa: lin.CLa, alphaL0: lin.alphaL0, eInv: lin.e, e: A.oswald(lin.e, g.AR, drag.CD0),
           xac: lin.xac, xacAbs: g.xMacLE + lin.xac * g.mac, Cm0: lin.Cm0, CLmax, clSource, stall,

@@ -5,8 +5,10 @@ import { COMPONENT_TYPES, VEHICLE_CLASSES, applyEdit, firstOf } from '../model/v
 import { saveVehicle, downloadVehicle, pickVehicleFile, resetVehicle, isModified } from '../model/store.js';
 import { seeds } from '../model/seeds.js';
 import { CouplingGraph } from '../engine/graph.js';
-import { fixedWingNodes, AERO_LEVELS } from '../analyses/fixedWing.js';
+import { fixedWingNodes, AERO_LEVELS, SECTION_LEVELS } from '../analyses/fixedWing.js';
 import { vehicleView } from './planform.js';
+import { mountView3d, defaultCamera } from './view3d.js';
+import { createAirfoilLab } from './airfoilLab.js';
 import { graphSvg, graphSummary } from './graphView.js';
 import { chart, extent } from './charts.js';
 import { nacaPanels } from '../../core/solvers/airfoilTheory.js';
@@ -25,7 +27,7 @@ const MISSION_FIELDS = [
 
 export function renderWorkspace(root, doc) {
   const graph = new CouplingGraph(fixedWingNodes());
-  const ui = { sel: 'wing', level: 'vehicle', layers: { clmap: true, load: true, mac: true, cg: true, items: false, lenses: true } };
+  const ui = { sel: 'wing', level: 'vehicle', view: 'top', cam: defaultCamera(), layers: { clmap: true, load: true, mac: true, cg: true, items: false, lenses: true } };
   let saveTimer = null;
 
   // ---------- layout ----------
@@ -87,6 +89,7 @@ export function renderWorkspace(root, doc) {
   }
   addEventListener('themechange', () => { if (canvas.isConnected) paintCanvas(); });
   graph.on(ev => { paintGraph(); if (ev.done) { canvas.classList.toggle('busy', !graph.isCurrent()); paintOutputs(); } });
+  const lab = createAirfoilLab({ doc, edit });
 
   async function loadFile() {
     try {
@@ -210,6 +213,8 @@ export function renderWorkspace(root, doc) {
     const toggles = [['clmap', 'Lift colouring (cℓ / cℓ,max)'], ['load', 'Span load'], ['mac', 'Mean aerodynamic chord'], ['cg', 'CG and neutral point'], ['items', 'Mass items'], ['lenses', 'Lens panels']];
     const focus = h('button', { class: 'tg sm focus-btn' + (ui.focus ? ' on' : ''), type: 'button', 'aria-pressed': ui.focus ? 'true' : 'false', title: 'Hide the side panels so the view fills the window (F)', onclick: toggleFocus }, ui.focus ? 'Exit focus' : 'Focus');
     if (ui.level !== 'vehicle') { layerBar.replaceChildren(focus); return; }
+    const views = h('span', { class: 'seg', role: 'group', 'aria-label': 'View' }, ...[['top', 'Top · to scale'], ['3d', '3D']].map(([id, t]) =>
+      h('button', { class: 'tg sm' + (ui.view === id ? ' on' : ''), type: 'button', 'aria-pressed': ui.view === id ? 'true' : 'false', onclick: () => { ui.view = id; paintCrumbs(); paintCanvas(); } }, t)));
     // the layers live in a small menu of Atlas-style switches
     const menu = h('div', { class: 'layer-menu', role: 'menu', hidden: !ui.layersOpen },
       h('div', { class: 'sec', style: { marginBottom: '6px' } }, 'Layers'),
@@ -220,7 +225,7 @@ export function renderWorkspace(root, doc) {
       }));
     const on = toggles.filter(([k]) => ui.layers[k]).length;
     const btn = h('button', { class: 'tg sm' + (ui.layersOpen ? ' on' : ''), type: 'button', 'aria-expanded': ui.layersOpen ? 'true' : 'false', onclick: e => { e.stopPropagation(); ui.layersOpen = !ui.layersOpen; paintCrumbs(); } }, `Layers · ${on}`, h('span', { 'aria-hidden': 'true', style: { opacity: '.6' } }, '▾'));
-    layerBar.replaceChildren(focus, h('div', { class: 'layer-wrap', onclick: e => e.stopPropagation() }, btn, menu));
+    layerBar.replaceChildren(views, focus, h('div', { class: 'layer-wrap', onclick: e => e.stopPropagation() }, btn, menu));
   }
   addEventListener('click', () => { if (ui.layersOpen && canvas.isConnected) { ui.layersOpen = false; paintCrumbs(); } });
 
@@ -228,7 +233,7 @@ export function renderWorkspace(root, doc) {
     const out = outputs();
     canvas.classList.toggle('busy', !graph.isCurrent());
     if (ui.level !== 'vehicle') {
-      canvas.replaceChildren(ui.level === 'mission' ? missionPane(out) : ui.level === 'wing' ? wingPane(out) : ui.level === 'section' ? sectionPane(out) : blPane());
+      canvas.replaceChildren(ui.level === 'mission' ? missionPane(out) : ui.level === 'wing' ? wingPane(out) : lab.pane(ui.level, out));
       return;
     }
     // the airframe is drawn at the canvas's own pixel size so it fills the view; lenses float over the right edge
@@ -238,15 +243,19 @@ export function renderWorkspace(root, doc) {
     const overlay = lenses && getComputedStyle(lenses).position === 'absolute';
     const size = { w: holder.clientWidth || 900, h: holder.clientHeight || 640 };
     lastSize = size.w + 'x' + size.h;
-    try { holder.append(vehicleView(doc, out, ui.layers, size, { reserveRight: overlay ? 232 : 0 }).svg); }
-    catch (e) { holder.append(h('div', { class: 'level-pane' }, h('div', { class: 'placeholder' }, 'Cannot draw this geometry: ' + e.message))); }
+    try {
+      if (ui.view === '3d') { holder.classList.add('v3d-wrap'); view3d = mountView3d(holder, doc, out, ui.layers, ui.cam, { reserveRight: overlay ? 232 : 0 }); }
+      else { view3d = null; holder.append(vehicleView(doc, out, ui.layers, size, { reserveRight: overlay ? 232 : 0 }).svg); }
+    } catch (e) { holder.append(h('div', { class: 'level-pane' }, h('div', { class: 'placeholder' }, 'Cannot draw this geometry: ' + e.message))); }
   }
+  let view3d = null;
   // redraw when the canvas changes size (window resize, panels wrapping)
   let lastSize = '', resizeFrame = 0;
   new ResizeObserver(() => {
     if (ui.level !== 'vehicle' || !canvas.isConnected) return;
     const holder = canvas.querySelector('.view-svg'); if (!holder) return;
     if (holder.clientWidth + 'x' + holder.clientHeight === lastSize) return;
+    if (view3d) { lastSize = holder.clientWidth + 'x' + holder.clientHeight; view3d.redraw(); return; }
     cancelAnimationFrame(resizeFrame); resizeFrame = requestAnimationFrame(paintCanvas);
   }).observe(canvas);
   function toggleFocus() { ui.focus = !ui.focus; mainEl.classList.toggle('focus', ui.focus); paintCrumbs(); }
@@ -308,7 +317,7 @@ export function renderWorkspace(root, doc) {
     const x = sectionAt(out);
     const box = h('button', { class: 'lens', type: 'button', onclick: goto('section') }, h('h4', {}, `Section at η ${SECTION_ETA}`, h('span', {}, x ? `Re ${fx(x.Re / 1e6, 2)} M` : '')));
     if (!x) { box.append(h('div', { class: 'cap' }, 'not computed')); return box; }
-    box.append(airfoilSvg(x.code, 196, 54, 180), h('div', { class: 'cap' }, `NACA ${x.code} · chord `, h('b', {}, `${fx(x.c * 1000, 0)} mm`), ' · cℓ ', h('b', {}, fx(x.cl, 2))), h('div', { class: 'go' }, 'Open section view →'));
+    box.append(airfoilSvg(x.code, 196, 54, 180), h('div', { class: 'cap' }, `NACA ${x.code} · chord `, h('b', {}, `${fx(x.c * 1000, 0)} mm`), ' · cℓ ', h('b', {}, fx(x.cl, 2))), h('div', { class: 'go' }, 'Open the airfoil lab →'));
     return box;
   }
 
@@ -331,7 +340,7 @@ export function renderWorkspace(root, doc) {
     const g = out.geometry, ae = out.aero, st = out.stability;
     if (!g || !ae || !st) return h('div', { class: 'level-pane' }, h('div', { class: 'placeholder' }, 'Aero is not computed (see the coupling graph).'));
     const strips = ae.spanLoad(st.CLtrim), stripsMax = ae.spanLoad(ae.CLmax);
-    const clmax = Math.min(g.root.clmax, g.tip.clmax);
+    const sec = out.sections || g, clmax = Math.min(sec.root.clmax, sec.tip.clmax);
     const cl = chart({ w: 900, h: 250, x: [0, 1], y: [0, Math.max(clmax, ...stripsMax.map(p => p.cl)) * 1.1], xLabel: 'Span station η = 2y/b', yLabel: 'Local cℓ', label: 'Local lift coefficient along the span',
       series: [{ pts: strips.map(p => [p.eta, p.cl]), cls: 's-accent' }, { pts: stripsMax.map(p => [p.eta, p.cl]), cls: 's-hl' }, { pts: [[0, clmax], [1, clmax]], cls: 's-warn' }],
       legend: [{ label: `Cruise trim, CL ${fx(st.CLtrim, 2)}`, cls: 's-accent' }, { label: `At CL,max ${fx(ae.CLmax, 2)}`, cls: 's-hl' }, { label: `Section cℓ,max ${fx(clmax, 2)}`, cls: 's-warn' }],
@@ -347,20 +356,6 @@ export function renderWorkspace(root, doc) {
         kv('Aerodynamic centre', `${fx(ae.xac * 100, 1)}% MAC`), kv('Cm,ac', minus(fx(ae.Cm0, 3))), kv('CL,max', `${fx(ae.CLmax, 3)} (${ae.clSource})`), kv('Reynolds (MAC)', `${fx(ae.Re / 1e6, 2)} M`)),
       h('h3', {}, `Zero-lift drag CD0 ${fx(ae.CD0, 4)} · component build-up`), h('div', { class: 'kv' }, drag));
   }
-  function sectionPane(out) {
-    const x = sectionAt(out);
-    if (!x) return h('div', { class: 'level-pane' }, h('div', { class: 'placeholder' }, 'Not computed.'));
-    return h('div', { class: 'level-pane' },
-      h('h3', {}, `Section at η ${SECTION_ETA} · NACA ${x.code}`),
-      plotCard(`NACA ${x.code}`, airfoilSvg(x.code, 900, 200, 760)),
-      h('div', { class: 'kv' }, kv('Chord', `${fx(x.c * 1000, 0)} mm`), kv('Reynolds', `${fx(x.Re / 1e6, 3)} M`), kv('Local cℓ at cruise', fx(x.cl, 3)), kv('Thickness', `${fx(x.sec.tc * 100, 0)}%`),
-        kv('Camber', `${fx(x.sec.camber * 100, 0)}%`), kv('Zero-lift α (thin airfoil)', `${minus(fx(x.sec.alpha0, 2))}°`), kv('cm,c/4 (thin airfoil)', minus(fx(x.sec.cm, 3))), kv('cℓ,max (handbook)', fx(x.sec.clmax, 2))),
-      h('div', { class: 'placeholder' }, 'Next slice: the viscous section lens. The core already has the mfoil viscous panel solver (core/solvers/mfoil/); it will run at this station\'s Reynolds number and local cℓ and feed a real polar back into the wing\'s stall and drag.'));
-  }
-  function blPane() {
-    return h('div', { class: 'level-pane' }, h('h3', {}, 'Boundary layer'),
-      h('div', { class: 'placeholder' }, 'Not in this slice. It will show the mfoil boundary-layer solution at the selected section: transition location, shape factor, skin friction and separation, on the upper and lower surfaces.'));
-  }
   const kv = (k, v) => h('div', {}, h('span', {}, k), h('b', {}, v));
   const plotCard = (title, el) => h('div', { class: 'plot-card' }, h('h4', {}, title), el);
 
@@ -375,11 +370,12 @@ export function renderWorkspace(root, doc) {
     const opt = (label, on, onclick, disabled, title) => h('button', { class: 'tg sm' + (on ? ' on' : ''), type: 'button', disabled, title, 'aria-pressed': on ? 'true' : 'false', onclick }, label);
     fidelity.replaceChildren(
       h('span', {}, 'Aero'), h('span', { class: 'opts' }, AERO_LEVELS.map(l => opt(l.label, nd.fidelity.value === l.id, () => { graph.setFidelity('aero', l.id); paintFidelity(); run(); }, false, l.note))),
-      h('span', {}, 'Sections'), h('span', { class: 'opts' }, opt('thin airfoil', true), opt('viscous', false, null, true, 'mfoil, in a later slice')),
+      h('span', {}, 'Sections'), h('span', { class: 'opts' }, SECTION_LEVELS.map(l => opt(l.label, graph.nodes.get('sections').fidelity.value === l.id, () => { graph.setFidelity('sections', l.id); paintFidelity(); run(); }, false, l.note))),
       h('span', {}, 'Stability'), h('span', { class: 'opts' }, opt('linear (Nelson)', true)),
       h('span', {}, 'Performance'), h('span', { class: 'opts' }, opt('point mass', true)),
       h('span', {}, 'Structure'), h('span', { class: 'opts' }, opt('areal mass', true), opt('beam', false, null, true, 'later slice')));
-    fidNote.textContent = AERO_LEVELS.find(l => l.id === nd.fidelity.value).note + '.';
+    const sl = SECTION_LEVELS.find(l => l.id === graph.nodes.get('sections').fidelity.value);
+    fidNote.textContent = AERO_LEVELS.find(l => l.id === nd.fidelity.value).note + '. Sections: ' + sl.note + '.';
   }
 
   // ---------- bottom: stats and requirements ----------
@@ -418,7 +414,7 @@ export function renderWorkspace(root, doc) {
   function paintRev() { revPill.replaceChildren('rev ', h('b', {}, String(doc.revision)), ` · ${doc.branch} · ${isModified(doc.id) ? 'saved locally ' + ago(doc.updated) : 'seed'}`); }
 
   function outputs() { const o = {}; for (const id of graph.order) o[id] = graph.outputs(id); return o; }
-  function paintOutputs() { paintTree(); paintDerived(); if (ui.sel === 'mass') paintMassPanel(); paintTrimNote(); paintCanvas(); paintStats(); paintRequirements(); }
+  function paintOutputs() { lab.update(outputs()); paintTree(); paintDerived(); if (ui.sel === 'mass') paintMassPanel(); paintTrimNote(); paintCanvas(); paintStats(); paintRequirements(); }
 
   paintRev(); paintTree(); paintEditor(); paintCondition(); paintCrumbs(); paintFidelity(); paintGraph();
   run();

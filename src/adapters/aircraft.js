@@ -53,8 +53,10 @@ export function surfaceOf(area, aspect, taper = 0.6) {
 // Zero-lift drag by Raymer's component build-up (turbulent skin friction × form factor × wetted area), with 10%
 // for interference, the propeller and the gear. Re per metre from the flight condition.
 const cfTurb = (Re, M) => 0.455 / (Math.log10(Re) ** 2.58 * (1 + 0.144 * M * M) ** 0.65);
-export function zeroLiftDrag({ S, parts, rePerM, M }) {
+// `fixed` adds items whose CD is already known (a wing from viscous section polars).
+export function zeroLiftDrag({ S, parts, rePerM, M, fixed = [] }) {
   let sum = 0; const items = [];
+  for (const f of fixed) { items.push({ ...f }); sum += f.CD; }
   for (const p of parts) {
     const Re = Math.max(1e4, rePerM * p.len), cf = cfTurb(Re, M);
     const CD = cf * p.FF * p.Q * p.Swet / S;
@@ -95,9 +97,10 @@ export function wingAero(W, { M = 0, method = 'vlm', nS = 24, nC = 6 } = {}) {
     spanLoad: CL => strips2(a, b, CL).filter(s => s.eta >= 0).sort((p, q) => p.eta - q.eta) };
 }
 
-// Wing CL,max by the nonlinear strip loop with a model section (the wing stalls strip by strip)
-export function wingStall(W, { M = 0 } = {}) {
-  const r = sectionOf(W.root), t = sectionOf(W.tip);
+// Wing CL,max by the nonlinear strip loop with a model section (the wing stalls strip by strip).
+// sections: { root, tip } with { alpha0, clmax } to use instead of the handbook values (viscous polars).
+export function wingStall(W, { M = 0, sections = null } = {}) {
+  const r = sections ? sections.root : sectionOf(W.root), t = sections ? sections.tip : sectionOf(W.tip);
   const sr = Wing.modelSection({ alpha0: r.alpha0, clmax: r.clmax }), stp = Wing.modelSection({ alpha0: t.alpha0, clmax: t.clmax });
   const sect = eta => (Math.abs(eta) < 0.5 ? sr : stp);
   const sw = Wing.sweepAlpha(W, { a0: 0, a1: 20, step: 1, sect, M, nS: 16 });

@@ -28,7 +28,7 @@ export function airframe(doc) {
 }
 
 // half-width of the fuselage at x: rounded nose, parallel cabin, tapering boom
-function bodyHalf(L, d, x) {
+export function bodyHalf(L, d, x) {
   const r = d / 2, u = x / L;
   return u < 0.16 ? r * Math.sqrt(Math.max(0, 1 - ((0.16 - u) / 0.16) ** 2)) : u < 0.55 ? r : r * (1 - 0.72 * (u - 0.55) / 0.45);
 }
@@ -205,7 +205,7 @@ export function vehicleView(doc, out, layers, size = { w: 900, h: 640 }, { reser
   const left = 18, right = reserveRight + 18, head = 30;
   const band = layers.load && ae && st ? (narrow ? 56 : Math.max(60, Math.min(120, H * 0.15))) : 0;
   const box = { x: left, y: head + band + (band ? 20 : 0), w: W - left - right, h: H - head - band - (band ? 20 : 0) - 50 };
-  const clmax = g ? Math.min(g.root.clmax, g.tip.clmax) : 1.4;
+  const sec = out.sections || g, clmax = sec ? Math.min(sec.root.clmax, sec.tip.clmax) : 1.4;
   const strips = ae && st ? ae.spanLoad(st.CLtrim) : null;
   const { A, T, k } = planformShapes(svg, doc, box, { clMap: layers.clmap && strips ? { strips, clmax } : null });
 

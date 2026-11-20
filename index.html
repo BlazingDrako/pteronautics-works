@@ -4,17 +4,181 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pteronautics Works</title>
-<meta name="description" content="Pteronautics Works: vehicle-centred design on the Pteronautics solver core.">
+<meta name="description" content="Pteronautics Works: design a whole aircraft in your browser. Change the wing and the aerodynamics, mass and balance, stability, performance and requirements recompute together, on the validated Pteronautics solver core. Free and open source.">
+<meta property="og:title" content="Pteronautics Works">
+<meta property="og:description" content="Vehicle-centred aerospace design in the browser. One edit, every analysis follows.">
 <meta name="theme-color" content="#0b0d11" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#f2f4f7" media="(prefers-color-scheme: light)">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="preload" href="assets/fonts/SpaceGrotesk.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/works.css">
+<link rel="stylesheet" href="site/site.css">
 <script>try { var t = localStorage.getItem('works-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) { }</script>
 </head>
-<body>
-<div id="app"></div>
-<noscript>Pteronautics Works needs JavaScript. Run <code>python3 serve.py</code> and open http://localhost:8790.</noscript>
-<script type="module" src="src/app.js"></script>
+<body class="site">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="s-nav" id="top">
+  <div class="s-wrap s-nav-in">
+    <a class="brand" href="#top" aria-label="Pteronautics Works, top of the page"><span class="brand-mark" data-brand></span><span><span class="brand-name">Pteronautics</span> <span class="brand-sub brand-product">Works</span></span></a>
+    <nav class="s-links" aria-label="Sections">
+      <a href="#demo">How it works</a><a href="#lab">Airfoil lab</a><a href="#fidelity">Fidelity</a><a href="#classes">Vehicles</a><a href="#family">Atlas</a>
+    </nav>
+    <span class="grow"></span>
+    <span data-theme-btn></span>
+    <a class="btn small s-hide-sm" href="https://github.com/BlazingDrako/pteronautics-works">Source</a>
+    <a class="btn small primary" href="app/">Open Works</a>
+  </div>
+</header>
+
+<main id="main">
+  <!-- hero -->
+  <section class="s-hero">
+    <div class="s-wrap s-hero-in">
+      <div class="s-hero-copy">
+        <p class="s-eyebrow">Pteronautics · Works · free and open source</p>
+        <h1>Design the whole vehicle. <span class="accent">Every analysis follows.</span></h1>
+        <p class="s-lede">Works is a design program for whole aircraft that runs in your browser. Change the wing, and the aerodynamics, mass and balance, stability, performance and requirements recompute together, on the same validated solvers as Pteronautics Atlas.</p>
+        <div class="s-cta">
+          <a class="btn primary big" href="app/#/v/kestrel">Open the sample aircraft <span aria-hidden="true">→</span></a>
+          <a class="btn big" href="app/">Go to the hangar</a>
+        </div>
+        <p class="s-fine">No install and no account. Your designs stay in your browser, and save as plain <code>.json</code> files.</p>
+      </div>
+      <figure class="s-hero-stage">
+        <div class="s-hero-3d" data-hero3d aria-label="Kestrel, the sample aircraft, in 3D"></div>
+        <div class="s-hero-chips" data-hero-chips aria-live="polite"></div>
+        <figcaption>Kestrel, an electric survey UAS, solved live on this page: vortex lattice wing, Nelson stability, point-mass performance. Drag to turn it.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- the coupling demo -->
+  <section class="s-sec" id="demo">
+    <div class="s-wrap">
+      <div class="s-head">
+        <p class="s-eyebrow">How it works</p>
+        <h2>One edit. Every analysis follows.</h2>
+        <p>Each analysis declares what it reads from the vehicle and which results it needs. An edit marks only what depends on it as stale, and the coupling graph reruns those, in order. Try it: these sliders drive the real graph.</p>
+      </div>
+      <div class="s-demo">
+        <div class="s-demo-ctl pnl pnl-pad" data-demo-controls></div>
+        <div class="s-demo-view pnl" data-demo-view></div>
+        <div class="s-demo-graph pnl pnl-pad">
+          <div class="sec-row"><span class="sec">Coupling graph</span><span data-demo-graph-head></span></div>
+          <div data-demo-graph></div>
+        </div>
+      </div>
+      <div class="s-demo-stats" data-demo-stats></div>
+    </div>
+  </section>
+
+  <!-- airfoil lab -->
+  <section class="s-sec s-alt" id="lab">
+    <div class="s-wrap s-split">
+      <div class="s-split-copy">
+        <p class="s-eyebrow">Airfoil lab</p>
+        <h2>Zoom from the vehicle into the boundary layer.</h2>
+        <p>Pick any station on the wing. The lab runs mfoil, a viscous panel method with a coupled boundary layer and e<sup>N</sup> transition, at that station's chord, Reynolds number and local lift at cruise, off the main thread.</p>
+        <ul class="s-list">
+          <li>Pressure on both surfaces against the inviscid solution</li>
+          <li>The boundary layer drawn on the section: laminar, turbulent, separated</li>
+          <li>Polars swept in the background, and one click to put a better airfoil on the wing</li>
+        </ul>
+        <p class="s-fine" data-lab-caption>Solving NACA 4415 at Kestrel's mid-semispan…</p>
+      </div>
+      <div class="s-split-vis">
+        <div class="plot-card" data-lab-cp><h4>Pressure and boundary layer</h4><div class="s-ph">Solving…</div></div>
+        <div class="plot-card" data-lab-bl><h4>Boundary layer, thickness × 8</h4><div class="s-ph">Solving…</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- fidelity -->
+  <section class="s-sec" id="fidelity">
+    <div class="s-wrap s-split rev">
+      <div class="s-split-copy">
+        <p class="s-eyebrow">Fidelity you choose</p>
+        <h2>Swap a model. See what it changes.</h2>
+        <p>Every node in the graph says which model it runs. Move the wing from lifting line to vortex lattice, or the sections from thin-airfoil theory to viscous polars, and everything downstream reruns with it.</p>
+        <div class="s-fid" data-fid-levels></div>
+      </div>
+      <div class="s-split-vis">
+        <div class="plot-card s-compare" data-compare>
+          <h4>Kestrel, thin airfoil against viscous sections</h4>
+          <div class="s-ph">Running the viscous polars…</div>
+        </div>
+        <p class="s-fine">Computed on this page. Thin airfoil uses a handbook c<sub>ℓ,max</sub> and fully turbulent skin friction (conservative); viscous uses mfoil polars with free transition on a clean wing (optimistic). The real aircraft sits between the two.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- requirements -->
+  <section class="s-sec s-alt" id="requirements">
+    <div class="s-wrap s-split">
+      <div class="s-split-copy">
+        <p class="s-eyebrow">Requirements, live</p>
+        <h2>The spec is part of the design.</h2>
+        <p>Targets sit next to the numbers they constrain, with the margin and status recomputed on every edit. A margin under 5% is marginal, so you see trouble coming before it fails.</p>
+        <div class="s-points">
+          <div><b>Open documents</b><span>One JSON file per vehicle, whatever its class.</span></div>
+          <div><b>No build, no server</b><span>Plain ES modules; runs offline once loaded.</span></div>
+          <div><b>Tested in the open</b><span>The <a href="tests/">test page</a> runs every check in your browser.</span></div>
+          <div><b>GPL-3.0</b><span>Free software, like the Atlas code it reuses.</span></div>
+        </div>
+      </div>
+      <div class="s-split-vis">
+        <div class="pnl s-reqs" data-reqs></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- vehicle classes -->
+  <section class="s-sec" id="classes">
+    <div class="s-wrap">
+      <div class="s-head">
+        <p class="s-eyebrow">Vehicles</p>
+        <h2>Six classes, one document shape.</h2>
+        <p>Fixed-wing aircraft are analysed end to end today. The other classes already fit the same vehicle document, and their analysis graphs come next, built on solvers the core already has.</p>
+      </div>
+      <div class="s-classes" data-classes></div>
+    </div>
+  </section>
+
+  <!-- family -->
+  <section class="s-sec s-alt" id="family">
+    <div class="s-wrap">
+      <div class="s-head">
+        <p class="s-eyebrow">The Pteronautics family</p>
+        <h2>Learn in Atlas. Design in Works.</h2>
+      </div>
+      <div class="s-family">
+        <a class="s-fam pnl" href="https://blazingdrako.github.io/pteronautics-atlas/">
+          <span class="s-fam-tag">Pteronautics Atlas</span>
+          <b>Free, visual aerospace engineering tools</b>
+          <span>Interactive lessons and calculators: airfoils, wings, propulsion, structures, orbits and more. Every solver checked against references.</span>
+          <span class="go">Open Atlas →</span>
+        </a>
+        <a class="s-fam pnl on" href="app/">
+          <span class="s-fam-tag">Pteronautics Works</span>
+          <b>Vehicle-centred design</b>
+          <span>The same solver core, coupled around a whole vehicle: a systems tree, a coupling graph, fidelity levels and live requirements.</span>
+          <span class="go">Open Works →</span>
+        </a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="s-foot">
+  <div class="s-wrap s-foot-in">
+    <span class="brand"><span class="brand-mark" data-brand></span><span class="brand-name">Pteronautics Works</span></span>
+    <span class="muted">Copyright © 2026 Andrew Aguiar · <a href="https://github.com/BlazingDrako/pteronautics-works/blob/main/LICENSE">GPL-3.0</a> · mfoil port under MIT</span>
+    <span class="grow"></span>
+    <a href="app/">App</a><a href="tests/">Tests</a><a href="https://github.com/BlazingDrako/pteronautics-works">Source</a><a href="https://blazingdrako.github.io/pteronautics-atlas/">Atlas</a>
+  </div>
+</footer>
+<noscript><p class="s-wrap">The live figures on this page need JavaScript.</p></noscript>
+<script type="module" src="site/site.js"></script>
 </body>
 </html>
