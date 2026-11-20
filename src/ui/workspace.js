@@ -6,7 +6,7 @@ import { saveVehicle, downloadVehicle, pickVehicleFile, resetVehicle, isModified
 import { seeds } from '../model/seeds.js';
 import { noteEdit, recordStatuses, describeEdit } from '../model/history.js';
 import { CouplingGraph } from '../engine/graph.js';
-import { AERO_LEVELS, SECTION_LEVELS } from '../analyses/fixedWing.js';
+import { AERO_LEVELS, SECTION_LEVELS, STRUCTURE_LEVELS } from '../analyses/fixedWing.js';
 import { analysisNodes } from '../analyses/classes.js';
 import { vehicleView } from './planform.js';
 import { mountView3d, defaultCamera } from './view3d.js';
@@ -438,7 +438,24 @@ export function renderWorkspace(root, doc) {
         kv('Area S', `${fx(g.S, 3)} m²`), kv('Span b', `${fx(g.span, 2)} m`), kv('Aspect ratio', fx(g.AR, 2)), kv('MAC', `${fx(g.mac, 3)} m`),
         kv('CLα', `${fx(ae.CLa, 3)} /rad`), kv('αL0', `${minus(fx(ae.alphaL0, 2))}°`), kv('Span efficiency (inviscid)', fx(ae.eInv, 3)), kv('Oswald e', fx(ae.e, 3)),
         kv('Aerodynamic centre', `${fx(ae.xac * 100, 1)}% MAC`), kv('Cm,ac', minus(fx(ae.Cm0, 3))), kv('CL,max', `${fx(ae.CLmax, 3)} (${ae.clSource})`), kv('Reynolds (MAC)', `${fx(ae.Re / 1e6, 2)} M`)),
-      h('h3', {}, `Zero-lift drag CD0 ${fx(ae.CD0, 4)} · component build-up`), h('div', { class: 'kv' }, drag));
+      h('h3', {}, `Zero-lift drag CD0 ${fx(ae.CD0, 4)} · component build-up`), h('div', { class: 'kv' }, drag),
+      structurePane(out));
+  }
+  // the wing spar at beam level: bending moment and cap area along the span
+  function structurePane(out) {
+    const st = out.mass?.structure, w = firstOf(doc, 'wing');
+    if (!st || st.level !== 'beam') return h('div', { class: 'placeholder' }, `Wing mass is the structural areal mass × area (${fx(w?.arealMass, 2)} kg/m²). Choose "beam" under Fidelity › Structure to size the spar for bending and shear instead.`);
+    const b = st.beam, pts = b.stations;
+    const mom = chart({ w: 900, h: 230, x: [0, 1], y: [0, b.rootMoment / 1000 * 1.08], xLabel: 'Span station η = 2y/b', yLabel: 'Bending moment (kN·m)', label: 'Bending moment along the span at the ultimate load',
+      series: [{ pts: pts.map(p => [p.eta, p.M / 1000]), cls: 's-accent' }, { pts: pts.map(p => [p.eta, p.A * 1e6 / (b.rootCap * 1e6) * b.rootMoment / 1000]), cls: 's-hl' }],
+      legend: [{ label: 'Bending moment', cls: 's-accent' }, { label: 'Spar cap area (scaled to the root)', cls: 's-hl' }] });
+    return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
+      h('h3', {}, `Wing structure · beam · ${fx(st.mass, st.mass > 50 ? 1 : 2)} kg`),
+      h('div', { class: 'note' }, `Elliptic lift at ${fx(b.nUlt, 2)} g ultimate (1.5 × the limit load factor ${fx(w.loadFactor, 1)} g), on an I-beam spar 90% of the section deep, in ${b.material}. The wing's weight is iterated into the load; no inertia relief.`),
+      plotCard('Bending moment and spar caps along the span', mom),
+      h('div', { class: 'kv' },
+        kv('Root bending moment', `${fx(b.rootMoment / 1000, 2)} kN·m`), kv('Root shear', `${fx(b.rootShear / 1000, 2)} kN`), kv('Spar depth at the root', `${fx(b.rootDepth * 1000, 0)} mm`), kv('Cap area at the root', `${fx(b.rootCap * 1e6, 0)} mm²`),
+        kv('Spar caps', `${fx(b.caps, 2)} kg`), kv('Shear web', `${fx(b.web, 2)} kg`), kv('Skin, ribs & controls', `${fx(b.skin, 2)} kg`), kv('Equivalent areal mass', `${fx(st.mass / out.geometry.S, 2)} kg/m²`)));
   }
   const kv = (k, v) => h('div', {}, h('span', {}, k), h('b', {}, v));
   const plotCard = (title, el) => h('div', { class: 'plot-card' }, h('h4', {}, title), el);
@@ -457,9 +474,10 @@ export function renderWorkspace(root, doc) {
       h('span', {}, 'Sections'), h('span', { class: 'opts' }, SECTION_LEVELS.map(l => opt(l.label, graph.nodes.get('sections').fidelity.value === l.id, () => { graph.setFidelity('sections', l.id); paintFidelity(); run(); }, false, l.note))),
       h('span', {}, 'Stability'), h('span', { class: 'opts' }, opt('linear (Nelson)', true)),
       h('span', {}, 'Performance'), h('span', { class: 'opts' }, opt('point mass', true)),
-      h('span', {}, 'Structure'), h('span', { class: 'opts' }, opt('areal mass', true), opt('beam', false, null, true, 'later slice')));
+      h('span', {}, 'Structure'), h('span', { class: 'opts' }, STRUCTURE_LEVELS.map(l => opt(l.label, graph.nodes.get('mass').fidelity.value === l.id, () => { graph.setFidelity('mass', l.id); paintFidelity(); run(); }, false, l.note))));
     const sl = SECTION_LEVELS.find(l => l.id === graph.nodes.get('sections').fidelity.value);
-    fidNote.textContent = AERO_LEVELS.find(l => l.id === nd.fidelity.value).note + '. Sections: ' + sl.note + '.';
+    const stl = STRUCTURE_LEVELS.find(l => l.id === graph.nodes.get('mass').fidelity.value);
+    fidNote.textContent = AERO_LEVELS.find(l => l.id === nd.fidelity.value).note + '. Sections: ' + sl.note + '. Structure: ' + stl.note + '.';
   }
 
   // ---------- bottom: stats and requirements ----------

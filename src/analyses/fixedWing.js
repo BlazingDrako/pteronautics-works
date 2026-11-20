@@ -6,6 +6,7 @@ import * as A from '../adapters/aircraft.js';
 import { reBin, NPANEL } from '../adapters/airfoil.js';
 import { AirfoilWorker } from '../workers/client.js';
 import { flyMission } from './mission.js';
+import { wingMass } from './structures.js';
 
 const DEG = Math.PI / 180;
 // never-exceed speed (EAS) for the performance solver: 40 m/s for small aircraft, else 1.25 × the cruise speed
@@ -15,6 +16,11 @@ export const AERO_LEVELS = [
   { id: 'llt', label: 'LLT', note: 'Glauert lifting line: straight wings, quick' },
   { id: 'vlm', label: 'VLM', note: 'Vortex lattice, 24 × 6 panels per side' },
   { id: 'vlm-stall', label: 'VLM + stall', note: 'Adds the nonlinear strip loop for CL,max and where the stall starts' },
+];
+
+export const STRUCTURE_LEVELS = [
+  { id: 'areal', label: 'areal mass', note: 'Wing mass = structural areal mass × area' },
+  { id: 'beam', label: 'beam', note: 'Wing spar sized for bending and shear at 1.5 × the limit load factor, plus skin, ribs and controls per m²' },
 ];
 
 export const SECTION_LEVELS = [
@@ -112,10 +118,13 @@ export function fixedWingNodes({ airfoil = null } = {}) {
     {
       id: 'mass', label: 'Mass & balance', detail: 'build-up', after: ['geometry'],
       reads: ['*.mass', '*.x', 'wing.arealMass', 'mission.ballast'], outputs: ['total', 'xcg', 'h', 'items', 'I'],
-      run({ doc, inputs }) {
+      fidelity: { levels: STRUCTURE_LEVELS, value: 'areal' },
+      run({ doc, inputs, fidelity }) {
         const g = inputs.geometry, items = [];
+        const others = doc.components.reduce((s, c) => s + (c.type !== 'wing' && typeof c.mass === 'number' ? c.mass : 0), 0) + (doc.mission?.ballast > 0 ? doc.mission.ballast : 0);
+        let structure = null;
         for (const c of doc.components) {
-          if (c.type === 'wing') items.push({ id: c.id, name: c.name, mass: c.arealMass * g.S, x: g.xMacLE + 0.4 * g.mac, derived: true });
+          if (c.type === 'wing') { const wm = wingMass({ wing: c, g, others, level: fidelity }); structure = wm; items.push({ id: c.id, name: c.name, mass: wm.mass, x: g.xMacLE + 0.4 * g.mac, derived: true }); }
           else if (typeof c.mass === 'number') items.push({ id: c.id, name: c.name, mass: c.mass, x: c.x ?? 0 });
         }
         // water ballast (sailplanes) in wing tanks, at the wing's own CG
@@ -126,7 +135,7 @@ export function fixedWingNodes({ airfoil = null } = {}) {
         // inertias from Raymer's nondimensional radii of gyration (single-engine propeller aircraft)
         const b = g.span, L = g.fus.L || b / 2;
         const I = [total * (b * 0.25) ** 2 / 4, total * (L * 0.38) ** 2 / 4, total * ((b + L) / 2 * 0.39) ** 2 / 4];
-        return { total, xcg, h: (xcg - g.xMacLE) / g.mac, items, I };
+        return { total, xcg, h: (xcg - g.xMacLE) / g.mac, items, I, structure, method: fidelity === 'beam' ? 'beam' : 'areal' };
       },
     },
     {

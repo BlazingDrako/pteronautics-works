@@ -38,6 +38,8 @@ export const COMPONENT_TYPES = {
       n('x', 'Root LE position x', 'm', 0.52, -10, 100, 0.005), c('position', 'Vertical position', 'high', ['high', 'mid', 'low']),
       n('arealMass', 'Structural areal mass', 'kg/m²', 3.4, 0.5, 80, 0.05),
       n('laminar', 'Laminar run (chord fraction)', '', 0, 0, 0.8, 0.01), c('flaps', 'Camber flaps (glide polar)', 'none', ['none', 'camber']),
+      n('loadFactor', 'Limit load factor (beam)', 'g', 3.8, 1.5, 12, 0.1), c('spar', 'Spar material (beam)', 'carbon', ['carbon', 'glass', 'aluminium', 'spruce']),
+      n('skinMass', 'Skin, ribs & controls (beam)', 'kg/m²', 3, 0.1, 60, 0.05),
     ],
   },
   htail: {

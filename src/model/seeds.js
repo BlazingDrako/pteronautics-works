@@ -22,7 +22,7 @@ export function kestrel() {
     },
     components: [
       C('fuselage', 'fuselage', { name: 'Fuselage', length: 1.65, width: 0.16, mass: 4.2, x: 0.78 }),
-      C('wing', 'wing', { name: 'Wing', span: 3.2, rootChord: 0.36, taper: 0.6, sweep: 0, twist: -2, dihedral: 3, rootAirfoil: '4415', tipAirfoil: '4415', x: 0.52, position: 'high', arealMass: 3.4 }),
+      C('wing', 'wing', { name: 'Wing', span: 3.2, rootChord: 0.36, taper: 0.6, sweep: 0, twist: -2, dihedral: 3, rootAirfoil: '4415', tipAirfoil: '4415', x: 0.52, position: 'high', arealMass: 3.4, skinMass: 3.32 }),
       C('htail', 'htail', { name: 'Horizontal tail', area: 0.16, aspect: 4.5, sweep: 5, x: 1.55, efficiency: 0.9, tau: 0.5, mass: 0.55 }),
       C('vtail', 'vtail', { name: 'Fin & rudder', area: 0.1, aspect: 1.6, sweep: 25, x: 1.58, height: 0.2, mass: 0.35 }),
       C('propulsor', 'propulsor', { name: 'Motor & 18×10 prop', power: 1500, propEff: 0.78, motorEff: 0.88, diameter: 0.457, mass: 1.6, x: 0.06 }),
@@ -70,7 +70,7 @@ export function concepts() {
       },
       components: [
         C('fuselage', 'fuselage', { name: 'Cabin & fuselage', length: 8.2, width: 1.5, mass: 380, x: 3.9 }),
-        C('wing', 'wing', { name: 'Wing', span: 12, rootChord: 1.8, taper: 0.7, sweep: 0, twist: -2, dihedral: 2, rootAirfoil: '4415', tipAirfoil: '4412', x: 3.3, position: 'high', arealMass: 9 }),
+        C('wing', 'wing', { name: 'Wing', span: 12, rootChord: 1.8, taper: 0.7, sweep: 0, twist: -2, dihedral: 2, rootAirfoil: '4415', tipAirfoil: '4412', x: 3.3, position: 'high', arealMass: 9, skinMass: 8.0 }),
         C('htail', 'htail', { name: 'Horizontal tail', area: 3.2, aspect: 4.5, sweep: 10, x: 7.7, efficiency: 0.9, tau: 0.5, mass: 30 }),
         C('vtail', 'vtail', { name: 'Fin & rudder', area: 1.9, aspect: 1.5, sweep: 30, x: 7.8, height: 0.9, mass: 20 }),
         C('rotor', 'rotor', { name: 'Lift rotors & booms', count: 4, radius: 1.6, blades: 3, tipSpeed: 160, figureOfMerit: 0.72, motorEff: 0.92, mass: 190, x: 3.9 }),
@@ -105,7 +105,7 @@ export function concepts() {
       mission: { altitude: 1200, dT: 0, cruiseSpeed: 28, climbRate: 1.5, ballast: 0 },
       components: [
         C('fuselage', 'fuselage', { name: 'Fuselage & cockpit', length: 6.8, width: 0.62, mass: 115, x: 2.65, laminar: 0.3 }),
-        C('wing', 'wing', { name: 'Wing', span: 18, rootChord: 0.9, taper: 0.4, sweep: 0, twist: -1.5, dihedral: 3, rootAirfoil: '2412', tipAirfoil: '2410', x: 2.15, position: 'mid', arealMass: 17, laminar: 0.6, flaps: 'camber' }),
+        C('wing', 'wing', { name: 'Wing', span: 18, rootChord: 0.9, taper: 0.4, sweep: 0, twist: -1.5, dihedral: 3, rootAirfoil: '2412', tipAirfoil: '2410', x: 2.15, position: 'mid', arealMass: 17, laminar: 0.6, flaps: 'camber', loadFactor: 5.3, skinMass: 14.43 }),
         C('htail', 'htail', { name: 'Horizontal tail', area: 0.9, aspect: 6.5, sweep: 5, x: 6.35, efficiency: 0.95, tau: 0.5, mass: 7, laminar: 0.5 }),
         C('vtail', 'vtail', { name: 'Fin & rudder', area: 1.0, aspect: 1.4, sweep: 20, x: 6.4, height: 0.75, mass: 7, laminar: 0.5 }),
         C('payload', 'pilot', { name: 'Pilot & parachute', description: 'Pilot, parachute and oxygen', mass: 95, x: 1.65 }),

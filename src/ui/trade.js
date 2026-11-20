@@ -5,7 +5,7 @@ import { h, s, icon, brand, themeButton, fx, fsig, pct, minus, toast } from './d
 import { applyEdit, getPath } from '../model/vehicle.js';
 import { saveVehicle } from '../model/store.js';
 import { noteEdit } from '../model/history.js';
-import { AERO_LEVELS, SECTION_LEVELS } from '../analyses/fixedWing.js';
+import { AERO_LEVELS, SECTION_LEVELS, STRUCTURE_LEVELS } from '../analyses/fixedWing.js';
 import { analysisNodes, MAIN_METRIC } from '../analyses/classes.js';
 import {
   runStudy, runSensitivity, linspace, tradeVariables, variableInfo, defaultRange, metricsFor, metricInfo,
@@ -28,7 +28,7 @@ function defaults(doc) {
     sweep: { ...axis(px, 13), metrics: reqMetrics.length ? reqMetrics : [main, 'stability.SM'] },
     map: { x: axis(px, 13), y: axis(py, 11), metric: main },
     sens: { metric: main, frac: 10, paths: SENSITIVITY_DEFAULTS.filter(has) },
-    fid: { aero: 'vlm', sections: 'thin' },
+    fid: { aero: 'vlm', sections: 'thin', mass: 'areal' },
   };
 }
 // stored settings, kept only where they still fit this vehicle
@@ -43,7 +43,7 @@ function loadSettings(doc) {
   if (okAxis(st.sweep, LIMITS.sweep) && Array.isArray(st.sweep.metrics)) out.sweep = { ...st.sweep, metrics: st.sweep.metrics.filter(okMetric) };
   if (st.map && okAxis(st.map.x, LIMITS.map) && okAxis(st.map.y, LIMITS.map) && st.map.x.path !== st.map.y.path && okMetric(st.map.metric)) out.map = st.map;
   if (st.sens && okMetric(st.sens.metric) && Array.isArray(st.sens.paths) && st.sens.frac > 0) out.sens = { ...st.sens, paths: st.sens.paths.filter(okPath) };
-  if (st.fid && AERO_LEVELS.some(l => l.id === st.fid.aero) && SECTION_LEVELS.some(l => l.id === st.fid.sections)) out.fid = st.fid;
+  if (st.fid && AERO_LEVELS.some(l => l.id === st.fid.aero) && SECTION_LEVELS.some(l => l.id === st.fid.sections)) out.fid = { mass: 'areal', ...st.fid };
   return out;
 }
 const saveSettings = (doc, st) => { try { localStorage.setItem(KEY + doc.id, JSON.stringify(st)); } catch { } };
@@ -74,7 +74,7 @@ export function renderTrade(root, doc) {
   async function run() {
     if (job) job.aborted = true;
     const me = job = { aborted: false }, mode = st.mode;
-    const fidelity = { aero: st.fid.aero, sections: st.fid.sections };
+    const fidelity = { aero: st.fid.aero, sections: st.fid.sections, mass: st.fid.mass || 'areal' };
     const progress = (d, n) => { if (job === me) paintStatus(`Running ${d} / ${n}…`, d / n); };
     paintStatus('Running…', 0);
     out.classList.add('busy');
@@ -128,6 +128,7 @@ export function renderTrade(root, doc) {
       h('div', { class: 'sec', style: { margin: '16px 0 8px' } }, 'Fidelity'),
       selectField('Aero', AERO_LEVELS.map(l => [l.id, l.label]), st.fid.aero, v => { st.fid.aero = v; changed({ now: true }); }),
       selectField('Sections', SECTION_LEVELS.map(l => [l.id, l.label]), st.fid.sections, v => { st.fid.sections = v; changed({ now: true }); }),
+      selectField('Structure', STRUCTURE_LEVELS.map(l => [l.id, l.label]), st.fid.mass || 'areal', v => { st.fid.mass = v; changed({ now: true }); }),
       st.fid.sections === 'viscous' ? h('p', { class: 'note' }, 'Viscous sections run an mfoil polar for each new Reynolds number, so studies that change the chord, speed or altitude take longer.') : null,
       h('div', { class: 'row', style: { gap: '8px', marginTop: '14px' } },
         h('button', { class: 'btn small primary', type: 'button', onclick: () => changed({ now: true }) }, 'Run again'),
