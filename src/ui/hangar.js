@@ -93,7 +93,7 @@ function sidebar() {
     h('div', { class: 'nav-group' }, 'Libraries'),
     planned('airfoil', 'Airfoils'), planned('motor', 'Engines & motors'), planned('grid', 'Materials'), planned('cell', 'Propellants & cells'),
     h('div', { class: 'nav-group' }, 'Output'),
-    planned('doc', 'Reports'),
+    live ? h('a', { class: 'nav-item', href: `#/v/${live.id}/report`, title: `The design report of ${live.name}` }, icon('doc'), h('span', {}, 'Reports')) : planned('doc', 'Reports'),
     h('div', { class: 'sidebar-foot' }, themeButton(), h('div', { class: 'sidebar-credit' }, 'Made by Andrew Aguiar · ', h('a', { href: 'https://blazingdrako.github.io/pteronautics/' }, 'Pteronautics'))));
 }
 

@@ -525,3 +525,50 @@ tr.ms-bad td { background: color-mix(in srgb, var(--bad) 6%, transparent); }
 .rq-log li { border-left: 2px solid var(--border); padding-left: 10px; }
 .rq-log .note { margin-top: 2px; }
 .ms-settings { border-left-color: var(--border-strong); background: var(--bg-sunk); }
+
+/* ---------- design report: always a light paper page ---------- */
+.report-scroll { padding: 24px 16px 48px; background: var(--bg-sunk); flex: 1; }
+.report {
+  --bg: #ffffff; --bg-elev: #ffffff; --bg-sunk: #f2f4f7; --border: #dfe3e9; --border-strong: #c3c9d3;
+  --text: #141820; --text-2: #3f4756; --text-3: #6b7482; --accent: #1677b3; --accent-soft: rgba(22, 119, 179, 0.11);
+  --hl: #d9483b; --good: #1a7f37; --warn: #9a5b00; --bad: #c4232d; --lam: #12a594; --glow: rgba(22, 119, 179, 0.08);
+  color-scheme: light; color: var(--text); background: #fff;
+  max-width: 860px; margin: 0 auto; padding: 48px 56px 40px; border-radius: 6px; box-shadow: var(--shadow-lg); font-size: 13px; line-height: 1.55;
+}
+.report .brand { padding: 0; }
+.rp-title { border-bottom: 2px solid var(--text); padding-bottom: 18px; margin-bottom: 8px; }
+.rp-brand { display: flex; align-items: center; justify-content: space-between; color: var(--text-3); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600; margin-bottom: 26px; }
+.rp-title h1 { font-size: 34px; letter-spacing: -.03em; font-weight: 650; }
+.rp-role { color: var(--text-2); font-size: 15px; margin: 2px 0 14px; }
+.rp-sec { margin-top: 26px; break-inside: auto; }
+.rp-sec h2 { font-size: 17px; display: flex; gap: 10px; align-items: baseline; border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 10px; break-after: avoid; }
+.rp-sec h3 { font-size: 13px; margin: 12px 0 4px; }
+.rp-n { font: 600 12px var(--mono); color: var(--accent); }
+.rp-sec p { margin: 6px 0 10px; color: var(--text-2); }
+.rp-kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 18px; margin: 8px 0 12px; }
+.rp-kv dt { font-size: 11px; color: var(--text-3); margin: 0; }
+.rp-kv dd { margin: 0 0 4px; font: 600 13px var(--mono); color: var(--text); }
+.rp-t { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 12px; break-inside: auto; }
+.rp-t th { text-align: left; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); border-bottom: 1px solid var(--text-2); padding: 5px 8px; }
+.rp-t td { border-bottom: 1px solid var(--border); padding: 5px 8px; vertical-align: top; color: var(--text); }
+.rp-t tr { break-inside: avoid; }
+.rp-num td:not(:first-child) { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.rp-req td:nth-child(n+3):not(:last-child) { font-family: var(--mono); white-space: nowrap; }
+.rp-st { font-weight: 600; } .rp-st.met { color: var(--good); } .rp-st.marginal { color: var(--warn); } .rp-st.fail { color: var(--bad); }
+.rp-fig { margin: 12px 0 14px; break-inside: avoid; }
+.rp-fig svg { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 4px; background: #fff; }
+.rp-fig figcaption { font-size: 11.5px; color: var(--text-2); margin-top: 6px; }
+.rp-log { margin: 4px 0; padding-left: 18px; color: var(--text-2); font-size: 12px; }
+.rp-warn { color: var(--bad); }
+.rp-foot { margin-top: 32px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-3); text-align: center; }
+@media (max-width: 700px) { .report { padding: 24px 18px; } .rp-title h1 { font-size: 26px; } .rp-t { font-size: 11px; } .report-scroll { padding: 12px 8px 32px; } .rp-cfg td:nth-child(3) { word-break: break-word; } }
+@media print {
+  @page { size: A4; margin: 14mm 12mm; }
+  html, body { background: #fff !important; }
+  .no-print, .toast { display: none !important; }
+  .report-scroll { padding: 0; background: #fff; }
+  .report { box-shadow: none; padding: 0; max-width: none; border-radius: 0; }
+  .rp-sec { break-before: auto; }
+}
+.rp-tw { overflow-x: auto; } @media print { .rp-tw { overflow: visible; } }
+.report { --stage: #ffffff; --pf-body: #f7f9fc; --pf-skin-le: #e9f2fa; --pf-skin-te: #c9dbea; --pf-tail: #d7e4f0; --pf-shadow: rgba(16, 24, 40, .22); --pf-line: #2a3240; --sidebar: #ffffff; }
