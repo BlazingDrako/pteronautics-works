@@ -25,7 +25,7 @@ const MISSION_FIELDS = [
 
 export function renderWorkspace(root, doc) {
   const graph = new CouplingGraph(fixedWingNodes());
-  const ui = { sel: 'wing', level: 'vehicle', layers: { load: true, mac: true, cg: true, items: false } };
+  const ui = { sel: 'wing', level: 'vehicle', layers: { clmap: true, load: true, mac: true, cg: true, items: false, lenses: true } };
   let saveTimer = null;
 
   // ---------- layout ----------
@@ -44,6 +44,7 @@ export function renderWorkspace(root, doc) {
   const revPill = h('span', { class: 'pill' });
 
   const isSeed = seeds().some(v => v.id === doc.id);
+  let mainEl;
   root.replaceChildren(h('div', { class: 'ws' },
     h('header', { class: 'topbar' },
       brand({ compact: true }), h('span', { class: 'vsep' }),
@@ -57,7 +58,7 @@ export function renderWorkspace(root, doc) {
       h('button', { class: 'btn small', type: 'button', title: 'Replace this vehicle with one from a .json file', onclick: loadFile }, icon('upload'), 'Load .json'),
       isSeed ? h('button', { class: 'btn small', type: 'button', title: 'Discard local edits and go back to the seeded design', onclick: reset }, icon('reset'), 'Reset') : null,
       themeButton('btn small')),
-    h('div', { class: 'ws-main' },
+    mainEl = h('div', { class: 'ws-main' },
       h('aside', { class: 'col', 'aria-label': 'Systems and flight condition' }, tree, editor, condition),
       h('section', { class: 'pnl view', 'aria-label': 'Vehicle view' }, h('div', { class: 'view-bar' }, crumbs, h('span', { class: 'grow' }), layerBar), canvas),
       h('aside', { class: 'col right', 'aria-label': 'Coupling' },
@@ -202,35 +203,53 @@ export function renderWorkspace(root, doc) {
   function paintCrumbs() {
     crumbs.replaceChildren(...LEVELS.flatMap((l, i) => [
       i ? h('span', { class: 'crumb-sep', 'aria-hidden': 'true' }, '›') : null,
-      h('button', { class: 'crumb' + (ui.level === l.id ? ' on' : ''), type: 'button', 'aria-current': ui.level === l.id ? 'true' : null, onclick: () => { ui.level = l.id; paintCrumbs(); paintCanvas(); } }, l.id === 'section' ? `Section η ${SECTION_ETA}` : l.label),
+      h('button', { class: 'crumb' + (ui.level === l.id ? ' on' : ''), type: 'button', 'aria-current': ui.level === l.id ? 'true' : null, onclick: () => { ui.level = l.id; paintCrumbs(); paintCanvas(); } }, l.label),
     ]).filter(Boolean));
-    const toggles = ui.level === 'vehicle' ? [['load', 'Span load'], ['mac', 'MAC'], ['cg', 'CG & NP'], ['items', 'Mass items']] : [];
-    layerBar.replaceChildren(...toggles.map(([k, label]) => h('button', { class: 'tg' + (ui.layers[k] ? ' on' : ''), type: 'button', 'aria-pressed': ui.layers[k] ? 'true' : 'false', onclick: () => { ui.layers[k] = !ui.layers[k]; paintCrumbs(); paintCanvas(); } }, label)));
+    const toggles = ui.level === 'vehicle' ? [['clmap', 'cℓ map'], ['load', 'Span load'], ['mac', 'MAC'], ['cg', 'CG & NP'], ['items', 'Mass items'], ['lenses', 'Lenses']] : [];
+    const focus = h('button', { class: 'tg sm focus-btn' + (ui.focus ? ' on' : ''), type: 'button', 'aria-pressed': ui.focus ? 'true' : 'false', title: 'Hide the side panels so the view fills the window (F)', onclick: toggleFocus }, ui.focus ? 'Exit focus' : 'Focus');
+    layerBar.replaceChildren(focus, ...toggles.map(([k, label]) => h('button', { class: 'tg sm' + (ui.layers[k] ? ' on' : ''), type: 'button', 'aria-pressed': ui.layers[k] ? 'true' : 'false', onclick: () => { ui.layers[k] = !ui.layers[k]; paintCrumbs(); paintCanvas(); } }, label)));
   }
 
   function paintCanvas() {
     const out = outputs();
     canvas.classList.toggle('busy', !graph.isCurrent());
-    if (ui.level === 'vehicle') {
-      let view;
-      try { view = vehicleView(doc, out, ui.layers).svg; } catch (e) { view = h('div', { class: 'level-pane' }, h('div', { class: 'placeholder' }, 'Cannot draw this geometry: ' + e.message)); }
-      canvas.replaceChildren(h('div', { class: 'view-svg' }, view), h('div', { class: 'lenses' }, stabilityLens(out), powerLens(out), sectionLens(out)));
-    } else if (ui.level === 'mission') canvas.replaceChildren(missionPane(out));
-    else if (ui.level === 'wing') canvas.replaceChildren(wingPane(out));
-    else if (ui.level === 'section') canvas.replaceChildren(sectionPane(out));
-    else canvas.replaceChildren(blPane());
-    if (ui.level !== 'vehicle') canvas.style.gridTemplateColumns = 'minmax(0, 1fr)'; else canvas.style.gridTemplateColumns = '';
+    if (ui.level !== 'vehicle') {
+      canvas.replaceChildren(ui.level === 'mission' ? missionPane(out) : ui.level === 'wing' ? wingPane(out) : ui.level === 'section' ? sectionPane(out) : blPane());
+      return;
+    }
+    // the airframe is drawn at the canvas's own pixel size so it fills the view; lenses float over the right edge
+    const holder = h('div', { class: 'view-svg' });
+    const lenses = ui.layers.lenses ? h('div', { class: 'lenses' }, stabilityLens(out), powerLens(out), sectionLens(out)) : null;
+    canvas.replaceChildren(holder, ...(lenses ? [lenses] : []));
+    const overlay = lenses && getComputedStyle(lenses).position === 'absolute';
+    const size = { w: holder.clientWidth || 900, h: holder.clientHeight || 640 };
+    lastSize = size.w + 'x' + size.h;
+    try { holder.append(vehicleView(doc, out, ui.layers, size, { reserveRight: overlay ? 232 : 0 }).svg); }
+    catch (e) { holder.append(h('div', { class: 'level-pane' }, h('div', { class: 'placeholder' }, 'Cannot draw this geometry: ' + e.message))); }
   }
+  // redraw when the canvas changes size (window resize, panels wrapping)
+  let lastSize = '', resizeFrame = 0;
+  new ResizeObserver(() => {
+    if (ui.level !== 'vehicle' || !canvas.isConnected) return;
+    const holder = canvas.querySelector('.view-svg'); if (!holder) return;
+    if (holder.clientWidth + 'x' + holder.clientHeight === lastSize) return;
+    cancelAnimationFrame(resizeFrame); resizeFrame = requestAnimationFrame(paintCanvas);
+  }).observe(canvas);
+  function toggleFocus() { ui.focus = !ui.focus; mainEl.classList.toggle('focus', ui.focus); paintCrumbs(); }
+  addEventListener('keydown', e => {
+    if (!canvas.isConnected || e.key.toLowerCase() !== 'f' || e.metaKey || e.ctrlKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName)) return;
+    toggleFocus();
+  });
   const goto = level => () => { ui.level = level; paintCrumbs(); paintCanvas(); };
 
   function stabilityLens(out) {
     const st = out.stability;
-    const box = h('div', { class: 'lens plain' }, h('h4', {}, 'Stability · modes', h('span', {}, 'linear, stick-fixed')));
+    const box = h('div', { class: 'lens plain' }, h('h4', {}, 'Stability · modes', h('span', {}, 'stick-fixed')));
     if (!st) { box.append(h('div', { class: 'cap' }, 'not computed')); return box; }
     const roots = [...st.roots.lon.map(r => ({ r, c: 'var(--accent)' })), ...st.roots.lat.map(r => ({ r, c: 'var(--hl)' }))];
     const re = roots.map(x => x.r[0]), im = roots.map(x => x.r[1]);
     const xr = extent([...re, 0], 0.12), yr = extent([...im, 0], 0.12);
-    box.append(chart({ w: 260, h: 130, compact: true, x: xr, y: yr, series: [{ pts: [[0, yr[0]], [0, yr[1]]], cls: 's-muted' }], points: roots.map(({ r, c }) => ({ x: r[0], y: r[1], color: c })), label: 'Eigenvalues in the s-plane' }));
+    box.append(chart({ w: 196, h: 104, compact: true, x: xr, y: yr, series: [{ pts: [[0, yr[0]], [0, yr[1]]], cls: 's-muted' }], points: roots.map(({ r, c }) => ({ x: r[0], y: r[1], color: c })), label: 'Eigenvalues in the s-plane' }));
     const sp = st.sp, dr = st.dr, spi = st.spiral;
     box.append(h('div', { class: 'cap' }, `short period ζ ${sp.real ? 'real' : fx(sp.zeta, 2)} · Dutch roll ζ ${dr ? fx(dr.zeta, 3) : '—'}`),
       h('div', { class: 'cap' }, h('span', { style: { color: 'var(--accent)' } }, '● longitudinal'), '  ', h('span', { style: { color: 'var(--hl)' } }, '● lateral'), `  · spiral ${spi && spi.re > 0 ? 'T₂ ' + fx(spi.t2, 1) + ' s' : 'stable'}`));
@@ -248,9 +267,9 @@ export function renderWorkspace(root, doc) {
   }
   function powerLens(out) {
     const p = out.performance;
-    const box = h('button', { class: 'lens', type: 'button', onclick: goto('mission') }, h('h4', {}, 'Mission · power', h('span', {}, `battery ${fx(p?.E, 0)} Wh usable`)));
+    const box = h('button', { class: 'lens', type: 'button', onclick: goto('mission') }, h('h4', {}, 'Mission · power', h('span', {}, `${fx(p?.E, 0)} Wh`)));
     if (!p) { box.append(h('div', { class: 'cap' }, 'not computed')); return box; }
-    box.append(powerCurve(p, 260, 130, true), h('div', { class: 'cap' }, `battery draw at cruise ${fx(p.cruise.P, 0)} W · ${fx(p.cruise.endurance, 0)} min`), h('div', { class: 'go' }, 'open mission view ›'));
+    box.append(powerCurve(p, 196, 104, true), h('div', { class: 'cap' }, `battery draw at cruise ${fx(p.cruise.P, 0)} W · ${fx(p.cruise.endurance, 0)} min`), h('div', { class: 'go' }, 'open mission view ›'));
     return box;
   }
   function airfoilSvg(code, w, hgt, chordPx) {
@@ -274,7 +293,7 @@ export function renderWorkspace(root, doc) {
     const x = sectionAt(out);
     const box = h('button', { class: 'lens', type: 'button', onclick: goto('section') }, h('h4', {}, `Section · η ${SECTION_ETA}`, h('span', {}, x ? `Re ${fx(x.Re / 1e6, 2)} M` : '')));
     if (!x) { box.append(h('div', { class: 'cap' }, 'not computed')); return box; }
-    box.append(airfoilSvg(x.code, 260, 70, 220), h('div', { class: 'cap' }, `NACA ${x.code} · chord ${fx(x.c * 1000, 0)} mm · local cℓ ${fx(x.cl, 3)}`), h('div', { class: 'go' }, 'open section view ›'));
+    box.append(airfoilSvg(x.code, 196, 54, 180), h('div', { class: 'cap' }, `NACA ${x.code} · chord ${fx(x.c * 1000, 0)} mm · local cℓ ${fx(x.cl, 3)}`), h('div', { class: 'go' }, 'open section view ›'));
     return box;
   }
 

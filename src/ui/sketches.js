@@ -31,7 +31,7 @@ const FIXED = {
 export function sketch(v) {
   const svg = s('svg', { viewBox: '0 0 280 170', 'aria-hidden': 'true', preserveAspectRatio: 'xMidYMid meet' });
   if (v.class === 'fixed-wing') {
-    try { planformShapes(svg, v, { x: 14, y: 22, w: 252, h: 132, cls: { wing: 'sk-body', body: 'sk-dark', prop: 'sk-hl' } }); return svg; } catch { /* fall through */ }
+    try { planformShapes(svg, v, { x: 14, y: 16, w: 252, h: 140 }, { compact: true }); return svg; } catch { /* fall through */ }
   }
   svg.innerHTML = FIXED[v.class] || FIXED.sailplane;
   return svg;
