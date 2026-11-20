@@ -1,0 +1,26 @@
+Pteronautics Works (part of the Pteronautics family)
+Copyright (C) 2026 Andrew Aguiar
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program (see LICENSE).  If not, see
+<https://www.gnu.org/licenses/>.
+
+The solver core in core/ is a recorded snapshot of the solvers from
+Pteronautics Atlas, Copyright (C) 2026 Andrew Aguiar, also GPL-3.0
+(see core/SOURCE.md).
+
+Third-party code:
+  core/solvers/mfoil/ is a port of mfoil.m, Copyright (C) 2025
+  Krzysztof J. Fidkowski, used under the MIT license (see LICENSE-mfoil.txt).
+  assets/fonts/ contains Space Grotesk and JetBrains Mono, used under the
+  SIL Open Font License 1.1 (see the OFL-*.txt files in that folder).
