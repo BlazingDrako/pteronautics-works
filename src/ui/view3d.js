@@ -178,7 +178,9 @@ function camera(cam, bounds, W, H) {
   return { proj, eye: d, right, up, scale };
 }
 
-export function mountView3d(holder, doc, out, layers, cam, { onCamera, reserveRight = 0 } = {}) {
+// opts.chrome: false leaves out the preset buttons and the hint; opts.autoRotate turns the model slowly until the
+// first drag (not with prefers-reduced-motion, and only while the canvas is on screen).
+export function mountView3d(holder, doc, out, layers, cam, { onCamera, reserveRight = 0, chrome = true, autoRotate = false } = {}) {
   const g = out.geometry, ae = out.aero, st = out.stability, m = out.mass, sec = out.sections;
   const clmax = sec ? Math.min(sec.root.clmax, sec.tip.clmax) : g ? Math.min(g.root.clmax, g.tip.clmax) : 1.4;
   const strips = ae && st ? ae.spanLoad(st.CLtrim) : null;
@@ -187,9 +189,9 @@ export function mountView3d(holder, doc, out, layers, cam, { onCamera, reserveRi
   const presets = h('div', { class: 'v3d-presets', role: 'group', 'aria-label': 'View' },
     ...Object.entries(PRESETS).map(([id, p]) => h('button', { class: 'tg sm' + (cam.preset === id ? ' on' : ''), type: 'button', 'data-preset': id, 'aria-pressed': cam.preset === id ? 'true' : 'false', onclick: () => setPreset(id) }, p.label)));
   const hint = h('div', { class: 'v3d-hint' }, 'Drag to orbit · shift-drag to pan · scroll to zoom · double-click to reset');
-  holder.replaceChildren(canvas, presets, hint);
+  holder.replaceChildren(canvas, ...(chrome ? [presets, hint] : []));
   const ctx = canvas.getContext('2d');
-  let raf = 0, anim = null;
+  let raf = 0, anim = null, drag = null;
 
   function setPreset(id) {
     const p = PRESETS[id], from = { yaw: cam.yaw, pitch: cam.pitch };
@@ -205,7 +207,15 @@ export function mountView3d(holder, doc, out, layers, cam, { onCamera, reserveRi
   }
   function paintPresets() { for (const b of presets.children) { const on = b.dataset.preset === cam.preset; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); } }
   function schedule() { cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); }
-  function frame() { if (anim) anim(); draw(); if (anim) schedule(); }
+  const still = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let spinning = autoRotate && !still, onScreen = true, last = 0;
+  if (spinning && typeof IntersectionObserver !== 'undefined') new IntersectionObserver(([e]) => { onScreen = e.isIntersecting; if (onScreen) schedule(); }).observe(canvas);
+  function frame(t) {
+    if (anim) anim();
+    if (spinning && onScreen && !drag) { cam.yaw += Math.min(50, t - (last || t)) * 0.006; last = t; }
+    draw();
+    if (anim || (spinning && onScreen && canvas.isConnected)) schedule(); else last = 0;
+  }
 
   function draw() {
     if (!canvas.isConnected) return;
@@ -346,8 +356,7 @@ export function mountView3d(holder, doc, out, layers, cam, { onCamera, reserveRi
   }
 
   // ---- interaction ----
-  let drag = null;
-  canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, pan: e.shiftKey || e.button === 1 || e.button === 2 }; canvas.setPointerCapture(e.pointerId); canvas.classList.add('grabbing'); });
+  canvas.addEventListener('pointerdown', e => { spinning = false; drag = { x: e.clientX, y: e.clientY, pan: e.shiftKey || e.button === 1 || e.button === 2 }; canvas.setPointerCapture(e.pointerId); canvas.classList.add('grabbing'); });
   canvas.addEventListener('pointermove', e => {
     if (!drag) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
@@ -366,5 +375,6 @@ export function mountView3d(holder, doc, out, layers, cam, { onCamera, reserveRi
     e.preventDefault(); cam.yaw -= k[0]; cam.pitch = Math.max(-89.9, Math.min(89.9, cam.pitch - k[1])); cam.preset = null; cam.ortho = false; paintPresets(); schedule();
   });
   draw();
-  return { redraw: schedule, mesh };
+  if (spinning) schedule();
+  return { redraw: schedule, mesh, stop: () => { spinning = false; } };
 }

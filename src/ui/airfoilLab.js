@@ -125,82 +125,6 @@ export function createAirfoilLab({ doc, edit, onNavigate }) {
     for (const el of [parts.status, parts.blStatus]) if (el) { el.textContent = t; el.className = 'lab-status ' + (pending ? 'run' : err ? 'bad' : 'ok'); }
   }
 
-  // Cp along the chord above the section drawn with its displacement thickness
-  function cpView(r, W = 640) {
-    const N = r.N, cp = r.cp, cpi = r.cpi, xs = r.foil.x, zs = r.foil.z;
-    const padL = 46, padR = 16, cpTop = 24, cpH = 230, k = W - padL - padR, arrow = 0.035 * k;
-    let zmax = 0, zmin = 0; for (let i = 0; i < N; i++) { zmax = Math.max(zmax, zs[i]); zmin = Math.min(zmin, zs[i]); }
-    const foilY = cpTop + cpH + 30 + arrow * 1.6 + zmax * k, H = Math.round(foilY - zmin * k + arrow * 1.6 + 30);
-    const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Pressure coefficient along the chord and the section with its boundary layer' });
-    const X = x => padL + x * k;
-    const surf = is => Array.from(r.Is[is]).filter(i => i < N);
-    const series = (arr, is) => surf(is).map(i => [xs[i], -arr[i]]).sort((a, b) => a[0] - b[0]);
-    const all = [...Array.from(cp.subarray(0, N)), ...Array.from(cpi.subarray(0, N))].map(v => -v).filter(isFinite);
-    const lo = Math.max(-1.6, Math.min(-0.4, ...all)), hi = Math.min(8, Math.max(1, ...all));
-    const [y0, y1] = extent([lo, hi], 0.05);
-    const Y = v => cpTop + (y1 - v) / (y1 - y0) * cpH;
-    // grid
-    for (let v = Math.ceil(y0 * 2) / 2; v <= y1; v += 0.5) {
-      svg.append(s('line', { x1: padL, x2: W - padR, y1: Y(v), y2: Y(v), class: v === 0 ? 'ax' : 'grid-l' }));
-      if (Math.abs(v * 2 - Math.round(v * 2)) < 1e-9 && (Math.round(v * 2) % 2 === 0 || y1 - y0 < 3)) svg.append(s('text', { x: padL - 6, y: Y(v) + 3.5, class: 'ax-t', 'text-anchor': 'end' }, minus(String(+v.toFixed(1)))));
-    }
-    svg.append(s('text', { x: 12, y: cpTop + cpH / 2, class: 'ax-label', 'text-anchor': 'middle', transform: `rotate(-90 12 ${cpTop + cpH / 2})` }, '−Cp'));
-    const line = (pts, cls) => { if (pts.length) svg.append(s('path', { d: 'M' + pts.map(p => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(' L'), class: cls })); };
-    if (r.viscous) { line(series(cpi, 1), 's-muted'); line(series(cpi, 0), 's-muted'); }
-    line(series(cp, 1), 's-accent'); line(series(cp, 0), 's-hl');
-    // legend
-    const lg = [['Upper surface', 's-accent'], ['Lower surface', 's-hl'], ...(r.viscous ? [['Inviscid', 's-muted']] : [])];
-    let lx = W - padR;
-    for (const [t, c] of lg.reverse()) { const tw = t.length * 6.4 + 34; lx -= tw; svg.append(s('line', { x1: lx, x2: lx + 16, y1: 10, y2: 10, class: c }), s('text', { x: lx + 21, y: 13.5, class: 'leg-t' }, t)); }
-
-    // ---- the section, to scale on the same x axis ----
-    const Z = z => foilY - z * k;
-    // pressure arrows: suction pulls away from the surface, pressure pushes onto it
-    const nrm = normals(r);
-    const arrows = s('g', { class: 'cp-arrows' });
-    for (let i = 1; i < N - 1; i += 2) {
-      const c = cp[i]; if (!isFinite(c)) continue;
-      const L = Math.min(1.6, Math.abs(c)) * arrow, [nx, nz] = nrm[i], x0 = X(xs[i]), z0 = Z(zs[i]);
-      const x1 = x0 + nx * L, z1 = z0 - nz * L;
-      arrows.append(s('line', { x1: x0, y1: z0, x2: x1, y2: z1, class: c < 0 ? 'cp-suc' : 'cp-pre' }));
-    }
-    svg.append(arrows);
-    const foil = 'M' + Array.from({ length: N }, (_, i) => `${X(xs[i]).toFixed(1)},${Z(zs[i]).toFixed(1)}`).join(' L') + ' Z';
-    svg.append(s('path', { d: foil, class: 'lab-foil' }));
-    if (r.viscous && r.dist) {
-      // displacement thickness: the surface pushed out along its normal by δ*, laminar and turbulent in turn
-      for (const is of [0, 1]) {
-        const idx = surf(is); let seg = [], turb = null;
-        const flush = () => { if (seg.length > 1) svg.append(s('path', { d: 'M' + seg.join(' L'), class: turb ? 'bl-turb' : 'bl-lam' })); };
-        for (const i of idx) {
-          const t = !!r.dist.turb[i], d = r.dist.ds[i], p = `${(X(xs[i]) + nrm[i][0] * d * k).toFixed(1)},${(Z(zs[i]) - nrm[i][1] * d * k).toFixed(1)}`;
-          if (turb !== null && t !== turb) { seg.push(p); flush(); seg = []; }
-          turb = t; seg.push(p);
-        }
-        flush();
-      }
-      // the wake: δ* split either side of the wake line
-      if (r.wake && r.Nw) {
-        const up = [], dn = [];
-        for (let j = 0; j < r.Nw; j++) { const x = r.wake.x[j]; if (x > 1.12) break; const d = r.dist.ds[N + j] / 2; up.push(`${X(x).toFixed(1)},${Z(r.wake.z[j] + d).toFixed(1)}`); dn.push(`${X(x).toFixed(1)},${Z(r.wake.z[j] - d).toFixed(1)}`); }
-        if (up.length > 1) svg.append(s('path', { d: 'M' + up.join(' L') + ' L' + dn.reverse().join(' L') + ' Z', class: 'bl-wake' }));
-      }
-      // transition and separation
-      r.transition.forEach((t, is) => {
-        if (t.x == null) return;
-        const idx = surf(is); let best = idx[0]; for (const i of idx) if (Math.abs(xs[i] - t.x) < Math.abs(xs[best] - t.x)) best = i;
-        const px = X(xs[best]), pz = Z(zs[best]) - nrm[best][1] * 14;
-        svg.append(s('circle', { cx: px, cy: Z(zs[best]), r: 4, class: 'tr-dot' }), s('text', { x: px, y: pz + (is ? -4 : 12), class: 'pf-lbl-s', 'text-anchor': 'middle' }, `${is ? 'upper' : 'lower'} transition ${fx(t.x, 2)}`));
-      });
-      for (const is of [0, 1]) for (const i of surf(is)) if (r.dist.cf[i] < 0) svg.append(s('circle', { cx: X(xs[i]), cy: Z(zs[i]), r: 2.2, class: 'sep-dot' }));
-    }
-    if (r.stag) svg.append(s('circle', { cx: X(r.stag.x), cy: Z(r.stag.z), r: 3.5, class: 'stag-dot' }));
-    // x axis
-    for (let i = 0; i <= 8; i += 2) svg.append(s('text', { x: X(i / 10), y: H - 6, class: 'ax-t', 'text-anchor': 'middle' }, String(i / 10)));
-    svg.append(s('text', { x: W - padR, y: H - 6, class: 'ax-label', 'text-anchor': 'end' }, 'x / c'));
-    return svg;
-  }
-
   function paintResult() {
     paintStatus();
     if (!res) return;
@@ -288,30 +212,6 @@ export function createAirfoilLab({ doc, edit, onNavigate }) {
     const X = v => pad.l + v * (w - pad.l - pad.r), Y = v => hh - pad.b - (v - y[0]) / (y[1] - y[0]) * (hh - pad.t - pad.b);
     sets.forEach((pts, k) => svg.append(s('path', { d: 'M' + pts.filter(p => isFinite(p[1])).map(p => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(' L'), class: k ? 's-hl dash' : 's-accent dash' })));
   }
-  // the section with its boundary layer exaggerated, laminar and turbulent coloured, separation marked
-  function blStrip(r, W = 900, H = 220) {
-    const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Section with its boundary layer, thickness exaggerated eight times' });
-    const padL = 30, k = W - 2 * padL - 60, X = x => padL + x * k, Z = z => H / 2 + 10 - z * k, N = r.N, nrm = normals(r), ex = 8;
-    for (const is of [0, 1]) {
-      const idx = Array.from(r.Is[is]).filter(i => i < N);
-      for (let j = 0; j + 1 < idx.length; j++) {
-        const a = idx[j], b = idx[j + 1], da = r.dist.ds[a] * ex, db = r.dist.ds[b] * ex;
-        const q = [[X(r.foil.x[a]), Z(r.foil.z[a])], [X(r.foil.x[b]), Z(r.foil.z[b])], [X(r.foil.x[b] + nrm[b][0] * db), Z(r.foil.z[b] + nrm[b][1] * db)], [X(r.foil.x[a] + nrm[a][0] * da), Z(r.foil.z[a] + nrm[a][1] * da)]];
-        const cls = r.dist.cf[a] < 0 ? 'bls-sep' : r.dist.turb[a] ? 'bls-turb' : 'bls-lam';
-        svg.append(s('path', { d: 'M' + q.map(p => p.map(v => v.toFixed(1)).join(',')).join(' L') + ' Z', class: cls }));
-      }
-    }
-    if (r.wake && r.Nw) {
-      const up = [], dn = [];
-      for (let j = 0; j < r.Nw; j++) { const x = r.wake.x[j]; if (x > 1.08) break; const d = r.dist.ds[N + j] * ex / 2; up.push(`${X(x).toFixed(1)},${Z(r.wake.z[j] + d).toFixed(1)}`); dn.push(`${X(x).toFixed(1)},${Z(r.wake.z[j] - d).toFixed(1)}`); }
-      if (up.length > 1) svg.append(s('path', { d: 'M' + up.join(' L') + ' L' + dn.reverse().join(' L') + ' Z', class: 'bls-turb', style: 'opacity:.45' }));
-    }
-    svg.append(s('path', { d: 'M' + Array.from({ length: N }, (_, i) => `${X(r.foil.x[i]).toFixed(1)},${Z(r.foil.z[i]).toFixed(1)}`).join(' L') + ' Z', class: 'lab-foil' }));
-    const lg = [['laminar', 'bls-lam'], ['turbulent', 'bls-turb'], ['separated', 'bls-sep']];
-    lg.forEach(([t, c], i) => { svg.append(s('rect', { x: padL + i * 110, y: H - 22, width: 14, height: 10, rx: 2, class: c }), s('text', { x: padL + i * 110 + 20, y: H - 13, class: 'leg-t' }, t)); });
-    return svg;
-  }
-
   // ---------- life cycle ----------
   function refreshAll() { paintControls(); request(); paintResult(); }
   return {
@@ -325,6 +225,106 @@ export function createAirfoilLab({ doc, edit, onNavigate }) {
     get state() { return { lab: { ...lab }, res, polar, pending, polarBusy }; },
     dispose() { pointW.cancel(); polarW.cancel(); },
   };
+}
+
+// Cp along the chord above the section drawn with its displacement thickness
+export function cpView(r, W = 640) {
+  const N = r.N, cp = r.cp, cpi = r.cpi, xs = r.foil.x, zs = r.foil.z;
+  const padL = 46, padR = 16, cpTop = 24, cpH = 230, k = W - padL - padR, arrow = 0.035 * k;
+  let zmax = 0, zmin = 0; for (let i = 0; i < N; i++) { zmax = Math.max(zmax, zs[i]); zmin = Math.min(zmin, zs[i]); }
+  const foilY = cpTop + cpH + 30 + arrow * 1.6 + zmax * k, H = Math.round(foilY - zmin * k + arrow * 1.6 + 30);
+  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Pressure coefficient along the chord and the section with its boundary layer' });
+  const X = x => padL + x * k;
+  const surf = is => Array.from(r.Is[is]).filter(i => i < N);
+  const series = (arr, is) => surf(is).map(i => [xs[i], -arr[i]]).sort((a, b) => a[0] - b[0]);
+  const all = [...Array.from(cp.subarray(0, N)), ...Array.from(cpi.subarray(0, N))].map(v => -v).filter(isFinite);
+  const lo = Math.max(-1.6, Math.min(-0.4, ...all)), hi = Math.min(8, Math.max(1, ...all));
+  const [y0, y1] = extent([lo, hi], 0.05);
+  const Y = v => cpTop + (y1 - v) / (y1 - y0) * cpH;
+  // grid
+  for (let v = Math.ceil(y0 * 2) / 2; v <= y1; v += 0.5) {
+    svg.append(s('line', { x1: padL, x2: W - padR, y1: Y(v), y2: Y(v), class: v === 0 ? 'ax' : 'grid-l' }));
+    if (Math.abs(v * 2 - Math.round(v * 2)) < 1e-9 && (Math.round(v * 2) % 2 === 0 || y1 - y0 < 3)) svg.append(s('text', { x: padL - 6, y: Y(v) + 3.5, class: 'ax-t', 'text-anchor': 'end' }, minus(String(+v.toFixed(1)))));
+  }
+  svg.append(s('text', { x: 12, y: cpTop + cpH / 2, class: 'ax-label', 'text-anchor': 'middle', transform: `rotate(-90 12 ${cpTop + cpH / 2})` }, '−Cp'));
+  const line = (pts, cls) => { if (pts.length) svg.append(s('path', { d: 'M' + pts.map(p => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(' L'), class: cls })); };
+  if (r.viscous) { line(series(cpi, 1), 's-muted'); line(series(cpi, 0), 's-muted'); }
+  line(series(cp, 1), 's-accent'); line(series(cp, 0), 's-hl');
+  // legend
+  const lg = [['Upper surface', 's-accent'], ['Lower surface', 's-hl'], ...(r.viscous ? [['Inviscid', 's-muted']] : [])];
+  let lx = W - padR;
+  for (const [t, c] of lg.reverse()) { const tw = t.length * 6.4 + 34; lx -= tw; svg.append(s('line', { x1: lx, x2: lx + 16, y1: 10, y2: 10, class: c }), s('text', { x: lx + 21, y: 13.5, class: 'leg-t' }, t)); }
+
+  // ---- the section, to scale on the same x axis ----
+  const Z = z => foilY - z * k;
+  // pressure arrows: suction pulls away from the surface, pressure pushes onto it
+  const nrm = normals(r);
+  const arrows = s('g', { class: 'cp-arrows' });
+  for (let i = 1; i < N - 1; i += 2) {
+    const c = cp[i]; if (!isFinite(c)) continue;
+    const L = Math.min(1.6, Math.abs(c)) * arrow, [nx, nz] = nrm[i], x0 = X(xs[i]), z0 = Z(zs[i]);
+    const x1 = x0 + nx * L, z1 = z0 - nz * L;
+    arrows.append(s('line', { x1: x0, y1: z0, x2: x1, y2: z1, class: c < 0 ? 'cp-suc' : 'cp-pre' }));
+  }
+  svg.append(arrows);
+  const foil = 'M' + Array.from({ length: N }, (_, i) => `${X(xs[i]).toFixed(1)},${Z(zs[i]).toFixed(1)}`).join(' L') + ' Z';
+  svg.append(s('path', { d: foil, class: 'lab-foil' }));
+  if (r.viscous && r.dist) {
+    // displacement thickness: the surface pushed out along its normal by δ*, laminar and turbulent in turn
+    for (const is of [0, 1]) {
+      const idx = surf(is); let seg = [], turb = null;
+      const flush = () => { if (seg.length > 1) svg.append(s('path', { d: 'M' + seg.join(' L'), class: turb ? 'bl-turb' : 'bl-lam' })); };
+      for (const i of idx) {
+        const t = !!r.dist.turb[i], d = r.dist.ds[i], p = `${(X(xs[i]) + nrm[i][0] * d * k).toFixed(1)},${(Z(zs[i]) - nrm[i][1] * d * k).toFixed(1)}`;
+        if (turb !== null && t !== turb) { seg.push(p); flush(); seg = []; }
+        turb = t; seg.push(p);
+      }
+      flush();
+    }
+    // the wake: δ* split either side of the wake line
+    if (r.wake && r.Nw) {
+      const up = [], dn = [];
+      for (let j = 0; j < r.Nw; j++) { const x = r.wake.x[j]; if (x > 1.12) break; const d = r.dist.ds[N + j] / 2; up.push(`${X(x).toFixed(1)},${Z(r.wake.z[j] + d).toFixed(1)}`); dn.push(`${X(x).toFixed(1)},${Z(r.wake.z[j] - d).toFixed(1)}`); }
+      if (up.length > 1) svg.append(s('path', { d: 'M' + up.join(' L') + ' L' + dn.reverse().join(' L') + ' Z', class: 'bl-wake' }));
+    }
+    // transition and separation
+    r.transition.forEach((t, is) => {
+      if (t.x == null) return;
+      const idx = surf(is); let best = idx[0]; for (const i of idx) if (Math.abs(xs[i] - t.x) < Math.abs(xs[best] - t.x)) best = i;
+      const px = X(xs[best]), pz = Z(zs[best]) - nrm[best][1] * 14;
+      svg.append(s('circle', { cx: px, cy: Z(zs[best]), r: 4, class: 'tr-dot' }), s('text', { x: px, y: pz + (is ? -4 : 12), class: 'pf-lbl-s', 'text-anchor': 'middle' }, `${is ? 'upper' : 'lower'} transition ${fx(t.x, 2)}`));
+    });
+    for (const is of [0, 1]) for (const i of surf(is)) if (r.dist.cf[i] < 0) svg.append(s('circle', { cx: X(xs[i]), cy: Z(zs[i]), r: 2.2, class: 'sep-dot' }));
+  }
+  if (r.stag) svg.append(s('circle', { cx: X(r.stag.x), cy: Z(r.stag.z), r: 3.5, class: 'stag-dot' }));
+  // x axis
+  for (let i = 0; i <= 8; i += 2) svg.append(s('text', { x: X(i / 10), y: H - 6, class: 'ax-t', 'text-anchor': 'middle' }, String(i / 10)));
+  svg.append(s('text', { x: W - padR, y: H - 6, class: 'ax-label', 'text-anchor': 'end' }, 'x / c'));
+  return svg;
+}
+
+// the section with its boundary layer exaggerated, laminar and turbulent coloured, separation marked
+export function blStrip(r, W = 900, H = 220) {
+  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Section with its boundary layer, thickness exaggerated eight times' });
+  const padL = 30, k = W - 2 * padL - 60, X = x => padL + x * k, Z = z => H / 2 + 10 - z * k, N = r.N, nrm = normals(r), ex = 8;
+  for (const is of [0, 1]) {
+    const idx = Array.from(r.Is[is]).filter(i => i < N);
+    for (let j = 0; j + 1 < idx.length; j++) {
+      const a = idx[j], b = idx[j + 1], da = r.dist.ds[a] * ex, db = r.dist.ds[b] * ex;
+      const q = [[X(r.foil.x[a]), Z(r.foil.z[a])], [X(r.foil.x[b]), Z(r.foil.z[b])], [X(r.foil.x[b] + nrm[b][0] * db), Z(r.foil.z[b] + nrm[b][1] * db)], [X(r.foil.x[a] + nrm[a][0] * da), Z(r.foil.z[a] + nrm[a][1] * da)]];
+      const cls = r.dist.cf[a] < 0 ? 'bls-sep' : r.dist.turb[a] ? 'bls-turb' : 'bls-lam';
+      svg.append(s('path', { d: 'M' + q.map(p => p.map(v => v.toFixed(1)).join(',')).join(' L') + ' Z', class: cls }));
+    }
+  }
+  if (r.wake && r.Nw) {
+    const up = [], dn = [];
+    for (let j = 0; j < r.Nw; j++) { const x = r.wake.x[j]; if (x > 1.08) break; const d = r.dist.ds[N + j] * ex / 2; up.push(`${X(x).toFixed(1)},${Z(r.wake.z[j] + d).toFixed(1)}`); dn.push(`${X(x).toFixed(1)},${Z(r.wake.z[j] - d).toFixed(1)}`); }
+    if (up.length > 1) svg.append(s('path', { d: 'M' + up.join(' L') + ' L' + dn.reverse().join(' L') + ' Z', class: 'bls-turb', style: 'opacity:.45' }));
+  }
+  svg.append(s('path', { d: 'M' + Array.from({ length: N }, (_, i) => `${X(r.foil.x[i]).toFixed(1)},${Z(r.foil.z[i]).toFixed(1)}`).join(' L') + ' Z', class: 'lab-foil' }));
+  const lg = [['laminar', 'bls-lam'], ['turbulent', 'bls-turb'], ['separated', 'bls-sep']];
+  lg.forEach(([t, c], i) => { svg.append(s('rect', { x: padL + i * 110, y: H - 22, width: 14, height: 10, rx: 2, class: c }), s('text', { x: padL + i * 110 + 20, y: H - 13, class: 'leg-t' }, t)); });
+  return svg;
 }
 
 // outward unit normals at the foil nodes (from neighbouring nodes; one sign for the whole closed contour)
