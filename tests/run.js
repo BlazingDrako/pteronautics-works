@@ -3,13 +3,14 @@ import * as core from './core/index.js';
 import { modelTests } from './works/model.tests.js';
 import { engineTests } from './works/engine.tests.js';
 import { analysesTests } from './works/analyses.tests.js';
+import { viscousTests } from './works/viscous.tests.js';
 
 const results = [];
 const log = (name, pass, detail = '') => results.push({ name, pass: !!pass, detail: String(detail ?? '') });
 
 export async function runAll(out, summary) {
   const only = new URLSearchParams(location.search).get('only');
-  const works = [['Vehicle model', modelTests], ['Coupling engine', engineTests], ['Fixed-wing analyses', analysesTests]];
+  const works = [['Vehicle model', modelTests], ['Coupling engine', engineTests], ['Fixed-wing analyses', analysesTests], ['Viscous sections & 3D', viscousTests]];
   const coreSteps = Object.entries(core).filter(([k, f]) => /Tests$/.test(k) && typeof f === 'function').map(([k, f]) => [`Core · ${k.replace(/Tests$/, '')}`, f]);
   const steps = only === 'works' ? works : only === 'core' ? coreSteps : [...works, ...coreSteps];
   for (const [group, fn] of steps) {

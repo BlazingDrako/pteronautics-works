@@ -61,7 +61,7 @@ export function analysesTests(log) {
   // couplings: what an edit marks stale, and trends
   const g2 = solve(doc).g;
   const st = g2.invalidate('wing.span').sort();
-  ok('a span edit marks geometry and everything after it stale, not the atmosphere', st.join() === 'aero,geometry,mass,performance,requirements,stability' && g2.state.get('atmosphere').state === 'current', st.join());
+  ok('a span edit marks geometry and everything after it stale, not the atmosphere', st.join() === 'aero,geometry,mass,performance,requirements,sections,stability' && g2.state.get('atmosphere').state === 'current', st.join());
   ok('a battery-position edit skips geometry and aero', g2.invalidate('battery.x').sort().join() === 'aero,geometry,mass,performance,requirements,stability'.split(',').filter(x => x !== 'geometry' && x !== 'aero').join());
   ok('a requirement target edit reruns only the requirements', (() => { const h2 = solve(doc).g; return h2.invalidate('requirements.R-01').join() === 'requirements'; })());
 

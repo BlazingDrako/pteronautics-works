@@ -7,7 +7,7 @@
 //   outputs: ['CLa', 'e', ...],                            // the names it promises (checked after each run)
 //   fidelity?: { levels: [{ id, label, note? }], value },  // optional selectable model level
 //   run({ doc, inputs, fidelity }) → outputs object         // inputs[afterId] = that node's outputs
-// }
+// }                                                          // (or a promise of one: run() awaits it)
 //
 // Each node has a state: 'stale' (needs a run), 'running', 'current', or 'failed' (its run threw, or a node it
 // depends on failed). Editing a document path marks every node that reads it stale, and everything downstream.
@@ -98,13 +98,14 @@ export class CouplingGraph {
     return this.pending;
   }
 
-  // synchronous variant (tests, batch use)
+  // synchronous variant (tests, batch use). A node whose run returns a promise is marked failed here.
   runSync(doc, { clock = now } = {}) {
     const ran = [], t0 = clock();
     for (const id of this.order) {
       const s = this.state.get(id);
       if (s.state === 'current') continue;
-      this._runNode(doc, id, clock); ran.push(id);
+      const p = this._runNode(doc, id, clock, true); ran.push(id);
+      if (p) p.catch(() => {});
     }
     return { ran, ms: clock() - t0 };
   }
@@ -117,28 +118,37 @@ export class CouplingGraph {
       s.state = 'running'; this.emit({ node: id });
       await yieldFn();
       if (this.generation !== gen) { return { ran, ms: clock() - t0, restart: true }; }
-      this._runNode(doc, id, clock); ran.push(id);
+      await this._runNode(doc, id, clock); ran.push(id);
       this.emit({ node: id });
       if (this.generation !== gen) { return { ran, ms: clock() - t0, restart: true }; }
     }
     return { ran, ms: clock() - t0 };
   }
 
-  _runNode(doc, id, clock) {
+  // Runs one node. Returns a promise when the node's run is asynchronous (and sync is false), else nothing.
+  // An async result is kept only if nothing marked the node stale while it ran.
+  _runNode(doc, id, clock, sync = false) {
     const nd = this.nodes.get(id), s = this.state.get(id);
     const failedDep = nd.after.find(a => this.state.get(a).state === 'failed');
     if (failedDep) { Object.assign(s, { state: 'failed', error: `needs "${failedDep}", which failed`, outputs: null, ms: 0 }); return; }
     const inputs = {}; for (const a of nd.after) inputs[a] = this.state.get(a).outputs;
     const t = clock();
-    try {
-      const out = nd.run({ doc, inputs, fidelity: nd.fidelity ? nd.fidelity.value : null });
+    s.state = 'running';
+    const done = out => {
       if (!out || typeof out !== 'object') throw new Error('returned no outputs');
       const missing = nd.outputs.filter(k => !(k in out));
       if (missing.length) throw new Error('missing outputs: ' + missing.join(', '));
       Object.assign(s, { state: 'current', error: null, outputs: out, ms: clock() - t, runs: s.runs + 1 });
-    } catch (e) {
-      Object.assign(s, { state: 'failed', error: e && e.message ? e.message : String(e), outputs: null, ms: clock() - t, runs: s.runs + 1 });
+    };
+    const fail = e => Object.assign(s, { state: 'failed', error: e && e.message ? e.message : String(e), outputs: null, ms: clock() - t, runs: s.runs + 1 });
+    let out;
+    try { out = nd.run({ doc, inputs, fidelity: nd.fidelity ? nd.fidelity.value : null }); } catch (e) { fail(e); return; }
+    if (out && typeof out.then === 'function') {
+      if (sync) { fail(new Error('asynchronous node: use run(), not runSync()')); return out; }
+      return out.then(o => { if (s.state !== 'running') return; try { done(o); } catch (e) { fail(e); } },
+        e => { if (s.state === 'running') fail(e); });
     }
+    try { done(out); } catch (e) { fail(e); }
   }
 
   // levels for drawing: each node one below its deepest dependency
