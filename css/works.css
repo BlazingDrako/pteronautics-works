@@ -279,8 +279,8 @@ svg text { font-family: var(--font); }
 .s-warn { stroke: var(--text-3); fill: none; stroke-width: 1.2; stroke-dasharray: 3 4; }
 
 /* planform: shading tokens per theme */
-:root { --pf-body-edge: #c3cad6; --pf-body-hi: #ffffff; --pf-skin-le: #e9f2fa; --pf-skin-te: #c9dbea; --pf-tail: #d7e4f0; --pf-shadow: rgba(16, 24, 40, .22); --pf-line: #2a3240; }
-:root[data-resolved-theme="dark"] { --pf-body-edge: #141a23; --pf-body-hi: #39424f; --pf-skin-le: #2b3a4b; --pf-skin-te: #18212c; --pf-tail: #233140; --pf-shadow: rgba(0, 0, 0, .6); --pf-line: #c9d1dc; }
+:root { --pf-body: #f7f9fc; --pf-skin-le: #e9f2fa; --pf-skin-te: #c9dbea; --pf-tail: #d7e4f0; --pf-shadow: rgba(16, 24, 40, .22); --pf-line: #2a3240; }
+:root[data-resolved-theme="dark"] { --pf-body: #262e39; --pf-skin-le: #2b3a4b; --pf-skin-te: #18212c; --pf-tail: #233140; --pf-shadow: rgba(0, 0, 0, .6); --pf-line: #c9d1dc; }
 .pf-wing { fill: var(--pf-skin-le); stroke: var(--pf-line); stroke-width: 1.2; }
 .pf-outline { fill: none; stroke: var(--pf-line); stroke-linejoin: round; }
 .pf-spar { fill: none; stroke: var(--pf-line); stroke-width: .8; opacity: .18; }

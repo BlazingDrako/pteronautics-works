@@ -100,9 +100,6 @@ export function planformShapes(svg, doc, box, { detail = true, clMap = null, com
 
   const defs = s('defs');
   defs.innerHTML = `
-    <linearGradient id="${id}-body" x1="0" x2="1" y1="0" y2="0">
-      <stop offset="0" style="stop-color:var(--pf-body-edge)"/><stop offset=".42" style="stop-color:var(--pf-body-hi)"/>
-      <stop offset=".58" style="stop-color:var(--pf-body-hi)"/><stop offset="1" style="stop-color:var(--pf-body-edge)"/></linearGradient>
     <linearGradient id="${id}-skin" x1="0" x2="0" y1="0" y2="1">
       <stop offset="0" style="stop-color:var(--pf-skin-le)"/><stop offset="1" style="stop-color:var(--pf-skin-te)"/></linearGradient>
     <radialGradient id="${id}-disc"><stop offset="0" style="stop-color:var(--hl);stop-opacity:.05"/><stop offset=".8" style="stop-color:var(--hl);stop-opacity:.18"/><stop offset="1" style="stop-color:var(--hl);stop-opacity:.45"/></radialGradient>
@@ -151,12 +148,12 @@ export function planformShapes(svg, doc, box, { detail = true, clMap = null, com
     }
   }
 
-  // ---- fuselage: shaded body, hatch, sensor window ----
+  // ---- fuselage: flat-filled body, hatch, sensor window ----
   if (A.L > 0) {
     const up = [], dn = [];
     for (let i = 0; i <= 48; i++) { const x = A.L * i / 48, hw = bodyHalf(A.L, A.d, x); up.push(T(x, hw)); dn.push(T(x, -hw)); }
     const body = path([...up, ...dn.reverse()]) + ' Z';
-    g.append(s('path', { d: body, style: `fill:url(#${id}-body)` }), s('path', { d: body, class: 'pf-outline', style: `stroke-width:${sw}` }));
+    g.append(s('path', { d: body, style: 'fill:var(--pf-body)' }), s('path', { d: body, class: 'pf-outline', style: `stroke-width:${sw}` }));
     if (detail && !compact) {
       const hw = A.d / 2 * 0.62, x0 = A.L * 0.2, x1 = A.L * 0.48;
       const [a, b] = [T(x0, -hw), T(x1, hw)];
@@ -172,7 +169,7 @@ export function planformShapes(svg, doc, box, { detail = true, clMap = null, com
     if (tailX > A.L - 0.01) {
       const hw = Math.max(bodyHalf(A.L, A.d, A.L * 0.999), A.d * 0.06);
       const pts = [T(A.L * 0.97, hw), T(tailX, hw * 0.8), T(tailX, -hw * 0.8), T(A.L * 0.97, -hw)];
-      g.append(s('path', { d: path(pts) + ' Z', style: `fill:url(#${id}-body)` }), s('path', { d: path(pts) + ' Z', class: 'pf-outline', style: `stroke-width:${sw}` }));
+      g.append(s('path', { d: path(pts) + ' Z', style: 'fill:var(--pf-body)' }), s('path', { d: path(pts) + ' Z', class: 'pf-outline', style: `stroke-width:${sw}` }));
     }
   }
 
@@ -181,7 +178,7 @@ export function planformShapes(svg, doc, box, { detail = true, clMap = null, com
     const pts = [], th = 0.09 * A.fin.c;
     for (let i = 0; i <= 16; i++) { const u = i / 16; pts.push([A.fin.x0 + u * A.fin.c, th * 2.9 * (Math.sqrt(u) - u) * 1.2]); }
     for (let i = 16; i >= 0; i--) { const u = i / 16; pts.push([A.fin.x0 + u * A.fin.c, -th * 2.9 * (Math.sqrt(u) - u) * 1.2]); }
-    g.append(s('path', { d: path(P(pts)) + ' Z', style: 'fill:var(--pf-body-hi)', class: 'pf-outline' }));
+    g.append(s('path', { d: path(P(pts)) + ' Z', style: 'fill:var(--pf-body)', class: 'pf-outline' }));
   }
 
   // ---- propeller: spinning disc, two blades and a spinner ----
