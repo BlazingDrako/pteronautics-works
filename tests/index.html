@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pteronautics Works · tests</title>
+<style>
+  body { font: 14px/1.45 system-ui, sans-serif; margin: 24px; background: #0f1115; color: #e6e8ec; }
+  h1 { font-size: 18px; margin: 0 0 6px; }
+  .links a { color: #3aa0d8; margin-right: 14px; font-size: 13px; }
+  #summary { font: 600 14px ui-monospace, monospace; margin: 12px 0; }
+  #summary.ok, .okc { color: #3fb950; } #summary.bad, .bad { color: #f85149; }
+  details { margin: 8px 0; } summary { cursor: pointer; padding: 4px 0; }
+  .r { padding: 8px 10px; border-radius: 6px; margin: 6px 0 6px 14px; background: #171a21; border-left: 4px solid #555; }
+  .r.ok { border-color: #3fb950; } .r.bad { border-color: #f85149; }
+  .d { color: #9aa3b2; font: 12px ui-monospace, monospace; white-space: pre-wrap; margin-top: 2px; }
+</style>
+</head>
+<body>
+<h1>Pteronautics Works — test suite</h1>
+<div class="links"><a href="?">all</a><a href="?only=works">Works only (model, engine, analyses)</a><a href="?only=core">core solvers only (copied from Atlas)</a></div>
+<div id="summary">Running…</div>
+<div id="out"></div>
+<script type="module">
+  import { runAll } from './run.js';
+  runAll(document.getElementById('out'), document.getElementById('summary'));
+</script>
+</body>
+</html>
