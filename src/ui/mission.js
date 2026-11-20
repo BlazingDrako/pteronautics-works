@@ -4,6 +4,7 @@
 // change to the airframe there shows here, and a segment edited here reaches the requirements there.
 import { h, icon, brand, themeButton, fx, toast } from './dom.js';
 import { saveVehicle } from '../model/store.js';
+import { noteEdit, recordStatuses } from '../model/history.js';
 import { SEGMENT_KINDS, makeSegment, newSegmentId } from '../model/segments.js';
 import { CouplingGraph } from '../engine/graph.js';
 import { fixedWingNodes } from '../analyses/fixedWing.js';
@@ -31,11 +32,12 @@ export function renderMission(root, doc) {
       h('span', { class: 'grow' }), status, themeButton('btn small')),
     h('div', { class: 'tr-main' }, h('aside', { class: 'col', 'aria-label': 'Mission segments' }, editor), h('section', { class: 'tr-results', 'aria-label': 'Mission results' }, out))));
 
-  graph.on(ev => { const sm = graphSummary(graph); status.className = 'pill ' + sm.cls; status.textContent = 'Analyses ' + sm.text; if (ev.done) { out.classList.toggle('busy', !graph.isCurrent()); paintResults(); } });
+  graph.on(ev => { const sm = graphSummary(graph); status.className = 'pill ' + sm.cls; status.textContent = 'Analyses ' + sm.text; if (ev.done) { out.classList.toggle('busy', !graph.isCurrent()); const rq = graph.outputs('requirements'); if (rq) recordStatuses(doc.id, rq.list); paintResults(); } });
   addEventListener('themechange', () => { if (out.isConnected) paintResults(); });
 
-  function commit({ structure = false } = {}) {
+  function commit({ structure = false, cause = 'Mission profile edited' } = {}) {
     doc.updated = new Date().toISOString();
+    noteEdit(doc.id, cause);
     graph.invalidate('mission.segments');
     if (structure) paintEditor();
     out.classList.add('busy');
@@ -67,7 +69,7 @@ export function renderMission(root, doc) {
         inp.addEventListener('change', () => {
           const v = +inp.value;
           if (inp.value === '' || !isFinite(v) || v < p.min || v > p.max) { inp.classList.add('invalid'); toast(`${p.label} must be between ${p.min} and ${p.max} ${p.unit}`, true); return; }
-          inp.classList.remove('invalid'); sg[p.key] = v; commit();
+          inp.classList.remove('invalid'); sg[p.key] = v; commit({ cause: `Mission · ${sg.name || K.label} · ${p.label} → ${v} ${p.unit}` });
         });
         return h('label', { class: 'tr-num' }, h('span', {}, `${p.label} (${p.unit})`), inp);
       })),
@@ -79,10 +81,10 @@ export function renderMission(root, doc) {
     // new flying segments go before a trailing reserve
     let at = list.length; while (kind !== 'reserve' && at > 0 && list[at - 1].kind === 'reserve') at--;
     list.splice(at, 0, sg);
-    commit({ structure: true });
+    commit({ structure: true, cause: `Mission · added a ${SEGMENT_KINDS[kind].label.toLowerCase()} segment` });
   }
   function move(i, d) { const list = segs(), [x] = list.splice(i, 1); list.splice(i + d, 0, x); commit({ structure: true }); }
-  function remove(i) { segs().splice(i, 1); commit({ structure: true }); }
+  function remove(i) { const [x] = segs().splice(i, 1); commit({ structure: true, cause: `Mission · removed ${x.name || SEGMENT_KINDS[x.kind].label}` }); }
 
   // ---------- results ----------
   function paintResults() {

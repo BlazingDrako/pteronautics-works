@@ -4,6 +4,7 @@ import { h, s, icon, brand, themeButton, fx, fsig, pct, minus, ago, toast } from
 import { COMPONENT_TYPES, VEHICLE_CLASSES, applyEdit, firstOf, getPath, LINKS } from '../model/vehicle.js';
 import { saveVehicle, downloadVehicle, pickVehicleFile, resetVehicle, isModified } from '../model/store.js';
 import { seeds } from '../model/seeds.js';
+import { noteEdit, recordStatuses, describeEdit } from '../model/history.js';
 import { CouplingGraph } from '../engine/graph.js';
 import { fixedWingNodes, AERO_LEVELS, SECTION_LEVELS } from '../analyses/fixedWing.js';
 import { vehicleView } from './planform.js';
@@ -72,6 +73,7 @@ export function renderWorkspace(root, doc) {
 
   // ---------- editing ----------
   function edit(path, value) {
+    noteEdit(doc.id, describeEdit(doc, path, value));
     const changed = applyEdit(doc, path, value);
     doc.updated = new Date().toISOString();
     graph.invalidate(changed);
@@ -86,7 +88,7 @@ export function renderWorkspace(root, doc) {
   }
   function editRequirement(id, target) {
     const r = doc.requirements.find(x => x.id === id); if (!r) return;
-    r.target = target; doc.updated = new Date().toISOString();
+    r.target = target; doc.updated = new Date().toISOString(); noteEdit(doc.id, `${id} target → ${target} ${r.unit || ''}`.trim());
     graph.invalidate('requirements.' + id); run();
     clearTimeout(saveTimer); saveTimer = setTimeout(() => { saveVehicle(doc); paintRev(); }, 250);
   }
@@ -95,7 +97,7 @@ export function renderWorkspace(root, doc) {
     await graph.run(doc);
   }
   addEventListener('themechange', () => { if (canvas.isConnected) paintCanvas(); });
-  graph.on(ev => { paintGraph(); if (ev.done) { canvas.classList.toggle('busy', !graph.isCurrent()); paintOutputs(); } });
+  graph.on(ev => { paintGraph(); if (ev.done) { canvas.classList.toggle('busy', !graph.isCurrent()); const rq = graph.outputs('requirements'); if (rq) recordStatuses(doc.id, rq.list); paintOutputs(); } });
   const lab = createAirfoilLab({ doc, edit });
 
   async function loadFile() {
@@ -422,7 +424,7 @@ export function renderWorkspace(root, doc) {
     const rq = outputs().requirements;
     const label = { met: 'met', marginal: 'marginal', fail: 'failing' };
     reqs.replaceChildren(
-      h('div', { class: 'sec-row' }, h('span', { class: 'sec' }, 'Requirements'), h('span', { class: 'muted', style: { fontSize: '12px' } }, rq ? `${rq.met} met · ${rq.marginal} marginal · ${rq.failing} failing · margin < 5% is marginal` : 'not computed')),
+      h('div', { class: 'sec-row' }, h('span', { class: 'sec' }, 'Requirements'), h('span', { class: 'muted', style: { fontSize: '12px' } }, rq ? `${rq.met} met · ${rq.marginal} marginal · ${rq.failing} failing · margin < 5% is marginal · ` : 'not computed · ', h('a', { href: `#/v/${doc.id}/requirements` }, 'Edit requirements and see their history →'))),
       h('div', { class: 'mx-wrap' }, h('table', { class: 'rq' },
         h('thead', {}, h('tr', {}, ['ID', 'Requirement', 'Area', 'Target', 'Value', 'Margin', 'Status'].map(t => h('th', {}, t)))),
         h('tbody', {}, (rq ? rq.list : doc.requirements).map(r => {

@@ -4,6 +4,7 @@
 import { h, s, icon, brand, themeButton, fx, fsig, pct, minus, toast } from './dom.js';
 import { applyEdit, getPath } from '../model/vehicle.js';
 import { saveVehicle } from '../model/store.js';
+import { noteEdit } from '../model/history.js';
 import { fixedWingNodes, AERO_LEVELS, SECTION_LEVELS } from '../analyses/fixedWing.js';
 import {
   runStudy, runSensitivity, linspace, tradeVariables, variableInfo, defaultRange, metricsFor, metricInfo,
@@ -279,6 +280,7 @@ export function renderTrade(root, doc) {
   function apply(at) {
     for (const [p, v] of at) applyEdit(doc, p, v);
     doc.updated = new Date().toISOString();
+    noteEdit(doc.id, 'Trade study applied: ' + at.map(([p, v]) => `${vlabel(p, false)} ${vfmt(p, v)}`).join(', '));
     saveVehicle(doc);
     toast(`${doc.name}: ${at.map(([p, v]) => `${vlabel(p, false)} ${vfmt(p, v)}`).join(', ')}. The workspace shows the new design.`);
     paintSetup(); changed({ now: true });
