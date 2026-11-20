@@ -174,7 +174,7 @@ export const SENSITIVITY_DEFAULTS = ['wing.span', 'wing.rootChord', 'wing.taper'
 
 // An evaluator: a working copy of the vehicle and one graph. at(edits) sets those paths (others at the design),
 // reruns what they reach, and returns the flattened metrics and the requirements.
-function makeEvaluator({ doc, nodes, fidelity }) {
+export function makeEvaluator({ doc, nodes, fidelity }) {
   const work = clone(doc), graph = new CouplingGraph(nodes);
   for (const [id, level] of Object.entries(fidelity)) if (level && graph.nodes.get(id)?.fidelity) graph.setFidelity(id, level);
   const asyncGraph = [...graph.nodes.values()].some(n => n.fidelity && n.fidelity.value === 'viscous');

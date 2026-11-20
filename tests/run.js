@@ -12,13 +12,14 @@ import { evtolTests, bemTests } from './works/evtol.tests.js';
 import { compareTests } from './works/compare.tests.js';
 import { librariesTests } from './works/libraries.tests.js';
 import { structuresTests } from './works/structures.tests.js';
+import { optimizeTests } from './works/optimize.tests.js';
 
 const results = [];
 const log = (name, pass, detail = '') => results.push({ name, pass: !!pass, detail: String(detail ?? '') });
 
 export async function runAll(out, summary) {
   const only = new URLSearchParams(location.search).get('only');
-  const works = [['Vehicle model', modelTests], ['Coupling engine', engineTests], ['Fixed-wing analyses', analysesTests], ['Viscous sections & 3D', viscousTests], ['Trade studies', tradeTests], ['Sizing & missions', missionTests], ['Requirements', requirementsTests], ['Sailplanes', sailplaneTests], ['eVTOL', evtolTests], ['eVTOL blade element', bemTests], ['Compare', compareTests], ['Libraries', librariesTests], ['Structures', structuresTests]];
+  const works = [['Vehicle model', modelTests], ['Coupling engine', engineTests], ['Fixed-wing analyses', analysesTests], ['Viscous sections & 3D', viscousTests], ['Trade studies', tradeTests], ['Sizing & missions', missionTests], ['Requirements', requirementsTests], ['Sailplanes', sailplaneTests], ['eVTOL', evtolTests], ['eVTOL blade element', bemTests], ['Compare', compareTests], ['Libraries', librariesTests], ['Structures', structuresTests], ['Optimiser', optimizeTests]];
   const coreSteps = Object.entries(core).filter(([k, f]) => /Tests$/.test(k) && typeof f === 'function').map(([k, f]) => [`Core · ${k.replace(/Tests$/, '')}`, f]);
   const steps = only === 'works' ? works : only === 'core' ? coreSteps : [...works, ...coreSteps];
   for (const [group, fn] of steps) {
