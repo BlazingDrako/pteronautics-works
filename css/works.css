@@ -126,7 +126,7 @@ a.card:hover, button.card:hover { border-color: var(--accent); }
 .stage { position: relative; height: 170px; background-color: var(--stage); background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size: 20px 20px; border-bottom: 1px solid var(--border); }
 :root[data-resolved-theme="dark"] .stage { background-image: linear-gradient(#141821 1px, transparent 1px), linear-gradient(90deg, #141821 1px, transparent 1px); }
 .stage svg { width: 100%; height: 100%; display: block; }
-.stage .tag { position: absolute; left: 12px; top: 12px; }
+.stage > .tag { position: absolute; left: 12px; top: 12px; }
 .stage .state { position: absolute; right: 12px; top: 12px; }
 .tag { font: 500 10.5px var(--mono); color: var(--text-2); padding: 3px 7px; border-radius: 6px; background: var(--bg-sunk); border: 1px solid var(--border); white-space: nowrap; }
 .tag.live { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
@@ -320,6 +320,7 @@ svg text { font-family: var(--mono); }
   .sidebar-foot { margin-top: 0; padding-top: 0; flex-direction: row; }
   .hangar { padding: 20px 16px 32px; }
   .hero-title { font-size: 26px; }
+  .topbar { position: static; }
   .ws-main { grid-template-columns: minmax(0, 1fr); padding: 12px; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 12px 12px; }
   .reqs { margin: 0 12px 20px; }
