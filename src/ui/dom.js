@@ -24,6 +24,9 @@ export const fx = (v, d = 1) => (typeof v === 'number' && isFinite(v) ? v.toFixe
 export const fsig = (v, n = 3) => (typeof v === 'number' && isFinite(v) ? (Math.abs(v) >= 10 ** n ? v.toFixed(0) : +v.toPrecision(n) + '') : '—');
 export const pct = (v, d = 1) => (typeof v === 'number' && isFinite(v) ? (v >= 0 ? '+' : '') + (v * 100).toFixed(d) + '%' : '—');
 export const minus = str => String(str).replace(/^-/, '−');
+// powers and energies in W / Wh, switching to kW / kWh from 10 kW(h) so an eVTOL reads as easily as a small UAS
+export const fW = w => (typeof w === 'number' && isFinite(w) ? (Math.abs(w) >= 1e4 ? `${(w / 1000).toFixed(Math.abs(w) >= 1e5 ? 0 : 1)} kW` : `${w.toFixed(0)} W`) : '—');
+export const fWh = e => (typeof e === 'number' && isFinite(e) ? (Math.abs(e) >= 1e4 ? `${(e / 1000).toFixed(Math.abs(e) >= 1e5 ? 0 : 1)} kWh` : `${e.toFixed(Math.abs(e) < 10 ? 1 : 0)} Wh`) : '—');
 
 export function ago(iso) {
   const t = Date.parse(iso); if (!isFinite(t)) return '';

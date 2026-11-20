@@ -121,12 +121,12 @@ export function wingStall(W, { M = 0, sections = null } = {}) {
 // ---------- the aircraft as the performance and stability solvers describe it ----------
 // performance.js AIRCRAFT entry (an electric motor is modelled with the solver's propeller model: shaft power with
 // the Gagg–Ferrar density lapse, which is within 1–4% of constant power at survey altitudes)
-export function perfAircraft(id, { S, b, e, CD0, CLa, CLmax, mass, power, propEff }) {
+export function perfAircraft(id, { S, b, e, CD0, CLa, CLmax, mass, power, propEff, vne = 40 }) {
   return {
     id, name: id, short: id, engine: 'piston', screen: 15, S, b, e, CD0, CLa, CLmax, CLmaxNeg: -0.6 * CLmax,
     to: null, land: null, mass: { empty: mass * 0.6, max: mass, def: mass, fuel: 0, payload: 0 },
     P0: power, eta: propEff, Vstar: 9, bsfc: 0.45,
-    limits: { nPos: 3.8, nNeg: -1.5, VC: 32, VD: 45, VNE: 40 }, mcrit: 0.6, plot: { Mmax: 0.15, zMax: 4000 },
+    limits: { nPos: 3.8, nNeg: -1.5, VC: 0.8 * vne, VD: 1.125 * vne, VNE: vne }, mcrit: 0.6, plot: { Mmax: 0.15, zMax: 4000 },
   };
 }
 

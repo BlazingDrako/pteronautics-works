@@ -67,7 +67,8 @@ export const COMPONENT_TYPES = {
   avionics: { label: 'Avionics', params: [...massX(1.4, 0.35)] },
   systems: { label: 'Systems', params: [t('description', 'Description', ''), ...massX(1.8, 0.7)] },
   // ---------- rotorcraft & eVTOL ----------
-  rotor: { label: 'Rotor', params: [n('count', 'Count', '', 4, 1, 16, 1), n('radius', 'Radius', 'm', 1, 0.05, 20, 0.01), n('blades', 'Blades', '', 3, 2, 8, 1), n('tipSpeed', 'Tip speed', 'm/s', 180, 50, 250, 1), ...massX(20, 1)] },
+  rotor: { label: 'Lift rotors', params: [n('count', 'Count', '', 4, 1, 16, 1), n('radius', 'Radius', 'm', 1, 0.05, 20, 0.01), n('blades', 'Blades', '', 3, 2, 8, 1), n('tipSpeed', 'Tip speed', 'm/s', 180, 50, 250, 1),
+    n('figureOfMerit', 'Figure of merit', '', 0.72, 0.4, 0.85, 0.01), n('motorEff', 'Motor + ESC efficiency', '', 0.9, 0.5, 0.99, 0.01), n('mass', 'Mass (all rotors, booms)', 'kg', 20, 0, 5000, 0.05), n('x', 'Position x (CG)', 'm', 1, -50, 200, 0.01)] },
   // ---------- high-speed ----------
   inlet: { label: 'Inlet', params: [c('kind', 'Kind', '2-ramp', ['pitot', '2-ramp', '3-ramp', 'axisymmetric']), n('designMach', 'Design Mach', '', 1.6, 0.5, 4, 0.05), ...massX(120, 5)] },
   turbofan: { label: 'Turbofan', params: [n('thrust', 'Max thrust (dry)', 'N', 60e3, 100, 5e5, 100), n('bypass', 'Bypass ratio', '', 0.6, 0, 12, 0.1), c('afterburner', 'Afterburner', 'yes', ['yes', 'no']), ...massX(1400, 10)] },
@@ -84,7 +85,7 @@ export const COMPONENT_TYPES = {
 // Classes: which component types each may hold, and whether this build can analyse it
 export const VEHICLE_CLASSES = {
   'fixed-wing': { label: 'Fixed-wing', implemented: true, types: ['fuselage', 'wing', 'htail', 'vtail', 'propulsor', 'battery', 'payload', 'avionics', 'systems'] },
-  rotorcraft: { label: 'Rotorcraft & eVTOL', implemented: false, types: ['fuselage', 'wing', 'htail', 'vtail', 'rotor', 'propulsor', 'battery', 'payload', 'avionics', 'systems'] },
+  rotorcraft: { label: 'Rotorcraft & eVTOL', implemented: true, types: ['fuselage', 'wing', 'htail', 'vtail', 'rotor', 'propulsor', 'battery', 'payload', 'avionics', 'systems'] },
   'high-speed': { label: 'High-speed', implemented: false, types: ['fuselage', 'wing', 'htail', 'vtail', 'inlet', 'turbofan', 'payload', 'avionics', 'systems'] },
   'launch-vehicle': { label: 'Launch vehicles', implemented: false, types: ['stage', 'rocketEngine', 'fairing', 'payload', 'avionics', 'systems'] },
   spacecraft: { label: 'Spacecraft', implemented: false, types: ['bus', 'solarArray', 'thruster', 'battery', 'payload', 'avionics'] },
@@ -134,8 +135,8 @@ export function upgrade(doc) {
     if (L && c[L.k] === undefined && c[L.b] > 0 && typeof c[L.a] === 'number') c[L.k] = c[L.a] / c[L.b];
     for (const p of T.params) if (c[p.key] === undefined) c[p.key] = p.def;
   }
-  if (doc.class === 'fixed-wing' && doc.mission) {
-    if (!Array.isArray(doc.mission.segments)) doc.mission.segments = defaultSegments(doc.mission);
+  if ((doc.class === 'fixed-wing' || doc.class === 'rotorcraft') && doc.mission) {
+    if (!Array.isArray(doc.mission.segments)) doc.mission.segments = defaultSegments(doc.mission, doc.class);
     for (const [k, v] of Object.entries(MISSION_DEFAULTS)) if (doc.mission[k] === undefined) doc.mission[k] = v;
   }
   return doc;

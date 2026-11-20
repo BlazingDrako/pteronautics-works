@@ -1,7 +1,7 @@
 // The design report (#/v/<id>/report): the vehicle's current analyses as a document to print or save as PDF. It runs
 // the same coupled graph as the workspace and lays out the summary, requirements, configuration and mass, aero,
 // stability, performance and mission, and how they were computed. Always drawn on a light "paper" page.
-import { h, icon, brand, fx, fsig, pct, minus } from './dom.js';
+import { h, icon, brand, fx, fsig, pct, minus, fW, fWh } from './dom.js';
 import { CouplingGraph } from '../engine/graph.js';
 import { analysisNodes } from '../analyses/classes.js';
 import { COMPONENT_TYPES, VEHICLE_CLASSES } from '../model/vehicle.js';
@@ -37,7 +37,9 @@ export function renderReport(root, doc) {
     const failed = graph.order.filter(id => graph.state.get(id).state === 'failed');
     const g = o.geometry, ae = o.aero, m = o.mass, st = o.stability, p = o.performance, ms = o.mission, rq = o.requirements, gl = o.glide;
     const date = new Date();
-    const sec = (n, title, ...body) => h('section', { class: 'rp-sec' }, h('h2', {}, h('span', { class: 'rp-n' }, n), title), ...body);
+    // sections are numbered in the order they appear (a vehicle shows only the ones its graph has)
+    let secN = 0;
+    const sec = (_, title, ...body) => h('section', { class: 'rp-sec' }, h('h2', {}, h('span', { class: 'rp-n' }, String(++secN)), title), ...body);
     const kv = rows => h('dl', { class: 'rp-kv' }, rows.filter(Boolean).map(([k, v]) => h('div', {}, h('dt', {}, k), h('dd', {}, v))));
     const table = (head, rows, cls = '') => h('div', { class: 'rp-tw' }, h('table', { class: 'rp-t ' + cls }, h('thead', {}, h('tr', {}, head.map(t => h('th', {}, t)))), h('tbody', {}, rows.map(r => h('tr', {}, r.map(c => h('td', {}, c)))))));
     const fig = (n, caption, el) => h('figure', { class: 'rp-fig' }, el, h('figcaption', {}, h('b', {}, `Figure ${n}. `), caption));
@@ -105,11 +107,18 @@ export function renderReport(root, doc) {
     if (p) {
       const xs = p.curve.map(c => c.V);
       parts.push(sec(6, 'Performance', h('p', {}, 'Point-mass performance at the flight condition, with the propeller efficiency rising with speed and the motor and controller losses.'),
-        kv([['Stall (1 g)', `${fx(p.Vs, 1)} m/s`], ['Best endurance', `${fx(p.endurance, 0)} min @ ${fx(p.Vend, 1)} m/s`], ['Best range', `${fx(p.range, 0)} km @ ${fx(p.Vrange, 1)} m/s`], ['Best climb', `${fx(p.RoC, 2)} m/s @ ${fx(p.Vy, 1)} m/s`], ['Max level speed', `${fx(p.Vmax, 1)} m/s`], ['Cruise', `${fx(p.cruise.V, 1)} m/s · ${fx(p.cruise.P, 0)} W · L/D ${fx(p.cruise.LD, 1)}`]]),
+        kv([['Stall (1 g)', `${fx(p.Vs, 1)} m/s`], ['Best endurance', `${fx(p.endurance, 0)} min @ ${fx(p.Vend, 1)} m/s`], ['Best range', `${fx(p.range, 0)} km @ ${fx(p.Vrange, 1)} m/s`], ['Best climb', `${fx(p.RoC, 2)} m/s @ ${fx(p.Vy, 1)} m/s`], ['Max level speed', `${fx(p.Vmax, 1)} m/s`], ['Cruise', `${fx(p.cruise.V, 1)} m/s · ${fW(p.cruise.P)} · L/D ${fx(p.cruise.LD, 1)}`]]),
         fig(3, 'Battery power and aerodynamic power required against airspeed, with the shaft power available.', chart({ w: 720, h: 250, x: [Math.min(...xs), Math.max(...xs)], y: [0, Math.max(...p.curve.map(c => c.Pav).filter(isFinite)) * 1.12], xLabel: 'True airspeed (m/s)', yLabel: 'Power (W)',
           series: [{ pts: p.curve.map(c => [c.V, c.Pel]), cls: 's-accent' }, { pts: p.curve.map(c => [c.V, c.Preq]), cls: 's-muted' }, { pts: p.curve.map(c => [c.V, c.Pav]), cls: 's-good' }],
           legend: [{ label: 'Battery power', cls: 's-accent' }, { label: 'Power required', cls: 's-muted' }, { label: 'Shaft power available', cls: 's-good' }],
           marks: [{ x: p.Vs, label: 'stall', cls: 's-warn' }, { x: p.Vend, label: 'best endurance', cls: 's-warn', row: 1 }, { x: p.cruise.V, label: 'cruise', cls: 's-hl', row: 2, color: 'var(--hl)' }] }))));
+    }
+
+    // hover (eVTOL)
+    if (o.hover) {
+      const hv = o.hover;
+      parts.push(sec(5.5, 'Hover', h('p', {}, `Momentum theory on ${hv.n} lift rotors (${fx(hv.A, 1)} m² of disc), with a figure of merit for the profile and tip losses, at the field elevation.`),
+        h('dl', { class: 'rp-kv' }, [['Battery power to hover', `${fx(hv.kW, 0)} kW`], ['Shaft power', `${fx(hv.P / 1000, 0)} kW`], ['Disk loading', `${fx(hv.diskLoadingKg, 1)} kg/m²`], ['Induced velocity', `${fx(hv.vh, 1)} m/s`], ['Power loading', `${fx(hv.powerLoading * 1000 / 9.80665, 1)} kg/kW`], ['Tip Mach', fx(hv.tipMach, 2)]].map(([k, v]) => h('div', {}, h('dt', {}, k), h('dd', {}, v))))));
     }
 
     // 6 glide (sailplanes)
@@ -124,10 +133,10 @@ export function renderReport(root, doc) {
 
     // 7 mission
     if (ms) {
-      parts.push(sec(7, 'Mission', h('p', {}, isFinite(ms.energy) ? `The mission uses ${fx(ms.energy, 0)} of ${fx(ms.usable, 0)} Wh usable, leaving ${fx(ms.margin, 1)}% after a ${fx(ms.reserve, 0)} Wh reserve. The hotel load takes ${fx(ms.hotelEnergy, 0)} Wh and ${fx(ms.loss, 1)} Wh is lost in the pack's resistance.` : `The mission cannot be flown: ${ms.errors.join('; ')}.`),
-        table(['#', 'Segment', 'Time', 'Distance', 'Height', 'Airspeed', 'Power', 'Energy'], ms.segments.map((s, k) => [String(k + 1), s.name + (s.error ? ` — ${s.error}` : ''), s.reserve ? 'held' : `${fx((s.t1 - s.t0) / 60, 1)} min`, s.reserve ? '—' : `${fx(s.x1 - s.x0, 1)} km`, s.z0 === s.z1 ? `${fx(s.z0, 0)} m` : `${fx(s.z0, 0)}→${fx(s.z1, 0)} m`, isFinite(s.V) ? `${fx(s.V, 1)} m/s` : '—', isFinite(s.P) ? `${fx(s.P, 0)} W` : '—', `${fx(s.E, 0)} Wh`]), 'rp-num'),
-        fig(4, 'Usable battery energy left through the mission; the dashed line is the reserve.', chart({ w: 720, h: 220, x: [0, Math.max(ms.duration, 1)], y: [Math.min(0, ...ms.track.map(q => ms.usable - q.E)), ms.usable * 1.05], xLabel: 'Time (min)', yLabel: 'Energy left (Wh)',
-          series: [{ pts: ms.track.map(q => [q.t / 60, ms.usable - q.E]), cls: 's-accent' }], hlines: [{ y: ms.reserve, label: 'reserve', cls: 's-target', color: 'var(--bad)' }] }))));
+      parts.push(sec(7, 'Mission', h('p', {}, isFinite(ms.energy) ? `The mission uses ${fx(ms.energy, 0)} of ${fWh(ms.usable)} usable, leaving ${fx(ms.margin, 1)}% after a ${fWh(ms.reserve)} reserve. The hotel load takes ${fWh(ms.hotelEnergy)} and ${fWh(ms.loss)} is lost in the pack's resistance.` : `The mission cannot be flown: ${ms.errors.join('; ')}.`),
+        table(['#', 'Segment', 'Time', 'Distance', 'Height', 'Airspeed', 'Power', 'Energy'], ms.segments.map((s, k) => [String(k + 1), s.name + (s.error ? ` — ${s.error}` : ''), s.reserve ? 'held' : `${fx((s.t1 - s.t0) / 60, 1)} min`, s.reserve ? '—' : `${fx(s.x1 - s.x0, 1)} km`, s.z0 === s.z1 ? `${fx(s.z0, 0)} m` : `${fx(s.z0, 0)}→${fx(s.z1, 0)} m`, isFinite(s.V) ? `${fx(s.V, 1)} m/s` : '—', isFinite(s.P) ? `${fW(s.P)}` : '—', `${fWh(s.E)}`]), 'rp-num'),
+        fig(4, 'Usable battery energy left through the mission; the dashed line is the reserve.', ((u, unit) => chart({ w: 720, h: 220, x: [0, Math.max(ms.duration, 1)], y: [Math.min(0, ...ms.track.map(q => (ms.usable - q.E) / u)), ms.usable / u * 1.05], xLabel: 'Time (min)', yLabel: `Energy left (${unit})`,
+          series: [{ pts: ms.track.map(q => [q.t / 60, (ms.usable - q.E) / u]), cls: 's-accent' }], hlines: [{ y: ms.reserve / u, label: 'reserve', cls: 's-target', color: 'var(--bad)' }] }))(ms.usable >= 2e4 ? 1000 : 1, ms.usable >= 2e4 ? 'kWh' : 'Wh'))));
     }
 
     // 8 method

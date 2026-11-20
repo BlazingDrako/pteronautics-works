@@ -54,6 +54,10 @@ function liveTags(v) {
     const S = w.span * w.rootChord * (1 + w.taper) / 2;
     return [`NACA ${w.rootAirfoil}`, `AR ${fx(w.span * w.span / S, 1)}`, `${fx(v.mission?.climbRate ?? 1.5, 1)} m/s climbs`];
   }
+  if (v.class === 'rotorcraft') {
+    const r = v.components.find(c => c.type === 'rotor'), b = v.components.find(c => c.type === 'battery'), p = v.components.find(c => c.type === 'propulsor');
+    return [r && `${r.count} lift${p ? ' + 1 cruise' : ''}`, r && `rotors ⌀ ${fx(2 * r.radius, 1)} m`, b && `${fx(b.energy / 1000, 0)} kWh`].filter(Boolean);
+  }
   return fixedWingTags(v);
 }
 function fixedWingTags(v) {

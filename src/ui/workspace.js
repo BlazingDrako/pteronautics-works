@@ -1,6 +1,6 @@
 // The aircraft workspace: systems tree and editors on the left, the vehicle view with lens panels in the centre,
 // the coupling graph and fidelity on the right, stat cards and the live requirements list along the bottom.
-import { h, s, icon, brand, themeButton, fx, fsig, pct, minus, ago, toast } from './dom.js';
+import { h, s, icon, brand, themeButton, fx, fsig, pct, minus, ago, toast, fW, fWh } from './dom.js';
 import { COMPONENT_TYPES, VEHICLE_CLASSES, applyEdit, firstOf, getPath, LINKS } from '../model/vehicle.js';
 import { saveVehicle, downloadVehicle, pickVehicleFile, resetVehicle, isModified } from '../model/store.js';
 import { seeds } from '../model/seeds.js';
@@ -37,7 +37,7 @@ const GLIDER_FIELDS = [
 
 export function renderWorkspace(root, doc) {
   const graph = new CouplingGraph(analysisNodes(doc));
-  const glider = doc.class === 'sailplane';
+  const glider = doc.class === 'sailplane', evtol = doc.class === 'rotorcraft';
   const ui = { sel: 'wing', level: 'vehicle', view: 'top', cam: defaultCamera(), layers: { clmap: true, load: true, mac: true, cg: true, items: false, lenses: true } };
   let saveTimer = null;
 
@@ -131,7 +131,8 @@ export function renderWorkspace(root, doc) {
     const m = out.mass, g = out.geometry;
     if (c.type === 'wing') return g ? `b ${fx(g.span, 2)} m · ${c.rootAirfoil}` : c.rootAirfoil;
     if (c.type === 'fuselage') return `${fx(c.length, 2)} m`;
-    if (c.type === 'battery') return `${c.energy} Wh`;
+    if (c.type === 'battery') return fWh(c.energy);
+    if (c.type === 'rotor') return `${c.count} × ⌀ ${fx(2 * c.radius, 1)} m`;
     if (c.type === 'propulsor') return `${fx(c.power / 1000, 2)} kW`;
     if (c.type === 'htail' || c.type === 'vtail') return `${fx(c.area, 3)} m²`;
     return typeof c.mass === 'number' ? `${fx(c.mass, 2)} kg` : '';
@@ -199,7 +200,7 @@ export function renderWorkspace(root, doc) {
     if (d.comp.type === 'wing' && g) rows.push(['Area S', `${fx(g.S, 3)} m²`], ['Aspect ratio', fx(g.AR, 2)], ['Tip chord', `${fx(g.ct * 1000, 0)} mm`], ['MAC', `${fx(g.mac * 1000, 0)} mm`], ['Wing mass', m ? `${fx(m.items.find(i => i.derived)?.mass, 2)} kg` : '—']);
     if (d.comp.type === 'htail' && g && g.ht && out.stability) rows.push(['Tail volume V_H', fx(out.stability.VH, 3)], ['Span', `${fx(g.ht.b, 3)} m`]);
     if (d.comp.type === 'vtail' && out.stability) rows.push(['Fin volume V_V', fx(out.stability.VV, 4)]);
-    if (d.comp.type === 'battery' && m) rows.push(['Usable energy', `${fx(d.comp.energy * d.comp.usable, 0)} Wh`]);
+    if (d.comp.type === 'battery' && m) rows.push(['Usable energy', `${fWh(d.comp.energy * d.comp.usable)}`]);
     if (d.comp.type === 'propulsor' && m) rows.push(['Power loading', `${fx(d.comp.power / m.total, 0)} W/kg`]);
     const L = LINKS[d.comp.type];
     const link = L ? h('p', { class: 'note', style: { marginTop: '8px' } }, d.comp.sizing === 'fixed'
@@ -227,7 +228,7 @@ export function renderWorkspace(root, doc) {
     const n = condition.querySelector('#trim-note'); if (!n) return;
     const st = outputs().stability, p = outputs().performance;
     if (glider) { n.textContent = st ? `Trimmed at ${fx(doc.mission.cruiseSpeed, 1)} m/s: α ${minus(fx(st.trim.alpha, 1))}°, elevator ${minus(fx(st.trim.de, 1))}° (tail incidence ${minus(fx(st.it, 1))}°, set to trim at 25% MAC).` : 'Trim not available.'; return; }
-    n.textContent = st && p ? `Trimmed at α ${minus(fx(st.trim.alpha, 1))}°, elevator ${minus(fx(st.trim.de, 1))}° (tail incidence ${minus(fx(st.it, 1))}°, set to trim at 25% MAC). Shaft power ${fx(p.cruise.P * prop().motorEff, 0)} W, battery draw ${fx(p.cruise.P, 0)} W.` : 'Trim not available.';
+    n.textContent = st && p ? `Trimmed at α ${minus(fx(st.trim.alpha, 1))}°, elevator ${minus(fx(st.trim.de, 1))}° (tail incidence ${minus(fx(st.it, 1))}°, set to trim at 25% MAC). Shaft power ${fW(p.cruise.P * prop().motorEff)}, battery draw ${fW(p.cruise.P)}.` : 'Trim not available.';
   }
   const prop = () => firstOf(doc, 'propulsor') || { motorEff: 1 };
 
@@ -319,9 +320,9 @@ export function renderWorkspace(root, doc) {
   }
   function powerLens(out) {
     const p = out.performance;
-    const box = h('button', { class: 'lens', type: 'button', onclick: goto('mission') }, h('h4', {}, 'Power curve', h('span', {}, `${fx(p?.E, 0)} Wh usable`)));
+    const box = h('button', { class: 'lens', type: 'button', onclick: goto('mission') }, h('h4', {}, 'Power curve', h('span', {}, `${fWh(p?.E)} usable`)));
     if (!p) { box.append(h('div', { class: 'cap' }, 'not computed')); return box; }
-    box.append(powerCurve(p, 196, 104, true), h('div', { class: 'cap' }, 'Cruise draw ', h('b', {}, `${fx(p.cruise.P, 0)} W`), ' · ', h('b', {}, `${fx(p.cruise.endurance, 0)} min`)), h('div', { class: 'go' }, 'Open mission view →'));
+    box.append(powerCurve(p, 196, 104, true), h('div', { class: 'cap' }, 'Cruise draw ', h('b', {}, `${fW(p.cruise.P)}`), ' · ', h('b', {}, `${fx(p.cruise.endurance, 0)} min`)), h('div', { class: 'go' }, 'Open mission view →'));
     return box;
   }
   // the glide polar (sink against airspeed, drawn downward) with the MacCready tangent from the thermal climb
@@ -385,16 +386,25 @@ export function renderWorkspace(root, doc) {
     const p = out.performance, atm = out.atmosphere;
     if (!p) return h('div', { class: 'level-pane' }, h('div', { class: 'placeholder' }, 'Performance is not computed (see the coupling graph).'));
     return h('div', { class: 'level-pane' },
-      h('h3', {}, 'Mission · cruise power and endurance'),
+      evtol && out.hover ? hoverCard(out.hover) : null,
+      h('h3', {}, evtol ? 'Wing-borne flight · cruise power' : 'Mission · cruise power and endurance'),
       h('div', { class: 'note' }, 'At the current flight condition. Best endurance is the speed of least battery power, best range the speed of most distance per joule, both kept above 1.2 × stall speed.'),
       plotCard('Power against airspeed', powerCurve(p, 900, 340, false)),
       h('div', { class: 'kv' },
         kv('Endurance (best)', `${fx(p.endurance, 0)} min @ ${fx(p.Vend, 1)} m/s`), kv('Range (best)', `${fx(p.range, 0)} km @ ${fx(p.Vrange, 1)} m/s`),
         kv('Cruise endurance', `${fx(p.cruise.endurance, 0)} min`), kv('Cruise range', `${fx(p.cruise.range, 0)} km`),
         kv('Cruise CL', fx(p.cruise.CL, 3)), kv('Cruise L/D', fx(p.cruise.LD, 1)), kv('Max L/D', fx(p.LDmax, 1)), kv('Best climb', `${fx(p.RoC, 2)} m/s @ ${fx(p.Vy, 1)} m/s`),
-        kv('Max level speed', `${fx(p.Vmax, 1)} m/s`), kv('Stall (1 g)', `${fx(p.Vs, 1)} m/s`), kv('Usable energy', `${fx(p.E, 0)} Wh`),
+        kv('Max level speed', `${fx(p.Vmax, 1)} m/s`), kv('Stall (1 g)', `${fx(p.Vs, 1)} m/s`), kv('Usable energy', `${fWh(p.E)}`),
         atm ? kv('Air density', `${fx(atm.cruise.rho, 4)} kg/m³`) : null, atm ? kv('Temperature', `${fx(atm.cruise.T - 273.15, 1)} °C`) : null),
       missionCard(out));
+  }
+  function hoverCard(hv) {
+    return h('div', { class: 'plot-card' }, h('h4', {}, 'Hover on the lift rotors', h('span', { class: 'sub' }, 'momentum theory · figure of merit')),
+      h('div', { class: 'kv' },
+        kv('Battery power to hover', `${fx(hv.kW, 0)} kW`), kv('Shaft power', `${fx(hv.P / 1000, 0)} kW (${fx(hv.perRotor / 1000, 0)} kW per rotor)`),
+        kv('Disk loading', `${fx(hv.diskLoadingKg, 1)} kg/m²`), kv('Induced velocity', `${fx(hv.vh, 1)} m/s`),
+        kv('Power loading', `${fx(hv.powerLoading * 1000 / 9.80665, 1)} kg/kW`), kv('Tip Mach', fx(hv.tipMach, 2))),
+      h('p', { class: 'note', style: { marginTop: '8px' } }, `At the field, ${hv.n} rotors of ${fx(hv.A / hv.n, 2)} m² each. Hover and transition are flown as hover segments in the mission planner.`));
   }
   function missionCard(out) {
     const m = out.mission;
@@ -402,7 +412,7 @@ export function renderWorkspace(root, doc) {
     if (!m) return h('div', { class: 'placeholder' }, 'The mission profile is not computed (see the coupling graph). ', link);
     return h('div', { class: 'plot-card' }, h('h4', {}, 'Mission profile', h('span', { class: 'sub' }, `${m.segments.length} segments`)),
       h('div', { class: 'kv' },
-        kv('Mission energy', isFinite(m.energy) ? `${fx(m.energy, 0)} of ${fx(m.usable, 0)} Wh` : 'cannot be flown'), kv('Left after reserve', isFinite(m.margin) ? `${fx(m.margin, 1)}%` : '—'),
+        kv('Mission energy', isFinite(m.energy) ? `${fx(m.energy, 0)} of ${fWh(m.usable)}` : 'cannot be flown'), kv('Left after reserve', isFinite(m.margin) ? `${fx(m.margin, 1)}%` : '—'),
         kv('Flight time', `${fx(m.duration, 0)} min`), kv('Distance', `${fx(m.distance, 1)} km`)),
       m.errors.length ? h('p', { class: 'note bad' }, m.errors.join(' · ')) : null,
       h('div', { style: { marginTop: '10px' } }, link));
@@ -456,6 +466,17 @@ export function renderWorkspace(root, doc) {
     const color = st => st === 'fail' ? 'var(--bad)' : st === 'marginal' ? 'var(--warn)' : null;
     const card = (label, value, unit, sub, metric) => h('div', { class: 'stat' }, h('span', { class: 'stat-l' }, label),
       h('span', { class: 'stat-v', style: { color: metric ? color(status(metric)) : null } }, value, unit ? h('small', {}, unit) : null), h('span', { class: 'stat-s' }, sub));
+    if (evtol) {
+      const hv = o.hover, ms = o.mission;
+      stats.replaceChildren(
+        card('Hover power', fx(hv?.kW, 0), 'kW', hv ? `disk loading ${fx(hv.diskLoadingKg, 0)} kg/m²` : '—', 'hover.kW'),
+        card('Mission margin', ms && isFinite(ms.margin) ? fx(ms.margin, 1) : '—', '%', ms ? `${fx(ms.energy / 1000, 1)} of ${fx(ms.usable / 1000, 1)} kWh` : '—', 'mission.margin'),
+        card('Cruise L/D', fx(p?.cruise.LD, 1), '', p ? `${fx(p.cruise.V, 0)} m/s · ${fx(p.cruise.P / 1000, 0)} kW` : '—', 'performance.LDmax'),
+        card('Stall (wing-borne)', fx(p?.Vs, 1), 'm/s', ae ? `CL,max ${fx(ae.CLmax, 2)} · transition above ${fx(1.2 * (p?.Vs ?? NaN), 0)} m/s` : '—', 'performance.Vs'),
+        card('Static margin', st ? minus(fx(st.SM, 1)) : '—', '% MAC', st ? `NP ${fx(st.xnp, 3)} m · CG ${fx(m?.xcg, 3)} m` : '—', 'stability.SM'),
+        card('Requirements met', rq ? `${rq.met} / ${rq.total}` : '—', '', rq ? `${rq.marginal} marginal · ${rq.failing} failing` : '—'));
+      return;
+    }
     if (glider) {
       const gl = o.glide;
       stats.replaceChildren(
@@ -469,7 +490,7 @@ export function renderWorkspace(root, doc) {
     }
     stats.replaceChildren(
       card('Lift-to-drag, max', fx(p?.LDmax, 1), '', p ? `cruise ${fx(p.cruise.LD, 1)} at ${fx(p.cruise.V, 0)} m/s` : '—', 'performance.LDmax'),
-      card('Endurance', fx(p?.endurance, 0), 'min', p ? `at ${fx(p.Vend, 1)} m/s · ${fx(p.Pend, 0)} W` : '—', 'performance.endurance'),
+      card('Endurance', fx(p?.endurance, 0), 'min', p ? `at ${fx(p.Vend, 1)} m/s · ${fW(p.Pend)}` : '—', 'performance.endurance'),
       card('Stall speed, 1 g', fx(p?.Vs, 1), 'm/s', ae ? `CL,max ${fx(ae.CLmax, 2)} · ${ae.clSource}` : '—', 'performance.Vs'),
       card('Static margin', st ? minus(fx(st.SM, 1)) : '—', '% MAC', st ? `NP ${fx(st.xnp, 3)} m · CG ${fx(m?.xcg, 3)} m` : '—', 'stability.SM'),
       card('Takeoff mass', fx(m?.total, 2), 'kg', m && g ? `W/S ${fx(m.total * 9.80665 / g.S, 0)} N/m²` : '—', 'mass.total'),

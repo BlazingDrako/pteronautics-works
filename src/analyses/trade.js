@@ -26,6 +26,8 @@ export const TRADE_METRICS = [
   { metric: 'performance.RoC', label: 'Best rate of climb', unit: 'm/s', d: 2, better: 1 },
   { metric: 'performance.Vmax', label: 'Max level speed', unit: 'm/s', d: 1, better: 1 },
   { metric: 'performance.LDmax', label: 'Max lift-to-drag', unit: '', d: 1, better: 1 },
+  { metric: 'hover.kW', label: 'Hover power', unit: 'kW', d: 0, better: -1 },
+  { metric: 'hover.diskLoadingKg', label: 'Disk loading', unit: 'kg/m²', d: 1, better: -1 },
   { metric: 'glide.LDmax', label: 'Best glide ratio', unit: '', d: 1, better: 1 },
   { metric: 'glide.minSink', label: 'Minimum sink', unit: 'm/s', d: 3, better: -1 },
   { metric: 'glide.xcSpeed', label: 'Cross-country speed', unit: 'km/h', d: 1, better: 1 },

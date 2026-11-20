@@ -7,6 +7,7 @@
 //   loiter   a time at an airspeed (a survey pattern, a hold)
 //   descent  to an altitude, gliding at the best lift-to-drag speed with the motor off
 //   reserve  a time at the best-endurance speed, kept in the battery at landing
+//   hover    on the lift rotors (eVTOL): a duration and a height change, transition included
 //
 // Heights are in m above the field (the flight starts on it; the air is ISA at field elevation + height), distances
 // in km, times in min, speeds in m/s.
@@ -19,7 +20,10 @@ export const SEGMENT_KINDS = {
   loiter: { label: 'Loiter', note: 'a time at an airspeed', params: [n('time', 'Time', 'min', 45, 0.5, 6000, 0.5), n('speed', 'Airspeed', 'm/s', 20, 3, 300, 0.5)] },
   descent: { label: 'Descent', note: 'glide at the best L/D speed, motor off', params: [n('to', 'To height', 'm', 0, 0, 8000, 10)] },
   reserve: { label: 'Reserve', note: 'held at landing, sized at the best-endurance speed', params: [n('time', 'Time', 'min', 10, 0, 600, 0.5)] },
+  hover: { label: 'Hover', note: 'on the lift rotors, climbing or descending; include the transition time', params: [n('duration', 'Duration', 's', 60, 1, 1800, 1), n('climb', 'Height change', 'm', 0, -1000, 1000, 5)], classes: ['rotorcraft'] },
 };
+// the kinds a class can fly (hover needs lift rotors)
+export const kindsFor = cls => Object.keys(SEGMENT_KINDS).filter(k => !SEGMENT_KINDS[k].classes || SEGMENT_KINDS[k].classes.includes(cls));
 
 export function makeSegment(kind, id, overrides = {}) {
   const K = SEGMENT_KINDS[kind];
@@ -38,8 +42,16 @@ export function newSegmentId(segs) {
 
 // A profile for a vehicle that has none: climb to its cruise altitude, two transit legs and a survey at its cruise
 // speed, descend, and keep a 10-minute reserve
-export function defaultSegments(mission = {}) {
+export function defaultSegments(mission = {}, cls = 'fixed-wing') {
   const z = Math.round(mission.altitude ?? 400), V = mission.cruiseSpeed ?? 22;
+  if (cls === 'rotorcraft') return [
+    makeSegment('hover', 's1', { name: 'Vertical takeoff and transition', duration: 60, climb: 50 }),
+    makeSegment('climb', 's2', { name: 'Climb', to: z }),
+    makeSegment('cruise', 's3', { name: 'Cruise', distance: 60, speed: V }),
+    makeSegment('descent', 's4', { name: 'Descent', to: 50 }),
+    makeSegment('hover', 's5', { name: 'Transition and vertical landing', duration: 60, climb: -50 }),
+    makeSegment('reserve', 's6', { name: 'Reserve', time: 20 }),
+  ];
   return [
     makeSegment('climb', 's1', { name: 'Climb out', to: z }),
     makeSegment('cruise', 's2', { name: 'Transit out', distance: 20, speed: V }),
