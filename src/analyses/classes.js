@@ -2,6 +2,7 @@
 import { fixedWingNodes } from './fixedWing.js';
 import { sailplaneNodes } from './sailplane.js';
 import { hoverNode } from './rotors.js';
+import { launcherNodes } from './launcher.js';
 
 // lift + cruise eVTOL: the fixed-wing graph (wing-borne flight on the cruise propeller) with a Hover node
 function evtolNodes(options) {
@@ -14,9 +15,9 @@ function evtolNodes(options) {
   return nodes;
 }
 
-const GRAPHS = { 'fixed-wing': fixedWingNodes, sailplane: sailplaneNodes, rotorcraft: evtolNodes };
+const GRAPHS = { 'fixed-wing': fixedWingNodes, sailplane: sailplaneNodes, rotorcraft: evtolNodes, 'launch-vehicle': launcherNodes };
 // the output a class is designed around (the default metric for its trade studies)
-export const MAIN_METRIC = { 'fixed-wing': 'performance.endurance', sailplane: 'glide.xcSpeed', rotorcraft: 'mission.margin' };
+export const MAIN_METRIC = { 'fixed-wing': 'performance.endurance', sailplane: 'glide.xcSpeed', rotorcraft: 'mission.margin', 'launch-vehicle': 'orbit.payloadCapacity' };
 
 export const hasGraph = doc => !!GRAPHS[doc?.class];
 export function analysisNodes(doc, options) {

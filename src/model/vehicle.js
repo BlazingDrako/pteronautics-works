@@ -76,7 +76,7 @@ export const COMPONENT_TYPES = {
   turbofan: { label: 'Turbofan', params: [n('thrust', 'Max thrust (dry)', 'N', 60e3, 100, 5e5, 100), n('bypass', 'Bypass ratio', '', 0.6, 0, 12, 0.1), c('afterburner', 'Afterburner', 'yes', ['yes', 'no']), ...massX(1400, 10)] },
   // ---------- launch vehicles ----------
   stage: { label: 'Stage', params: [n('dry', 'Dry mass', 'kg', 2000, 1, 1e6, 1), n('propellant', 'Propellant mass', 'kg', 20000, 0, 1e7, 1), n('diameter', 'Diameter', 'm', 1.8, 0.1, 15, 0.01), n('length', 'Length', 'm', 15, 0.5, 120, 0.1), n('x', 'Top of stage x', 'm', 0, 0, 200, 0.1)] },
-  rocketEngine: { label: 'Rocket engine', params: [n('count', 'Count', '', 1, 1, 40, 1), c('cycle', 'Cycle', 'gas generator', ['pressure-fed', 'gas generator', 'expander', 'staged combustion']), t('propellants', 'Propellants', 'LOX / RP-1'), n('thrustSL', 'Thrust (sea level, each)', 'N', 37.6e3, 0, 1e7, 100), n('isp', 'Isp (vacuum)', 's', 320, 100, 480, 1), ...massX(80, 14)] },
+  rocketEngine: { label: 'Rocket engine', params: [n('count', 'Count', '', 1, 1, 40, 1), c('cycle', 'Cycle', 'gas generator', ['pressure-fed', 'gas generator', 'expander', 'staged combustion']), t('propellants', 'Propellants', 'LOX / RP-1'), n('thrustSL', 'Thrust (sea level, each)', 'N', 37.6e3, 0, 1e7, 100), n('thrustVac', 'Thrust (vacuum, each)', 'N', 0, 0, 1e7, 100), n('isp', 'Isp (vacuum)', 's', 320, 100, 480, 1), ...massX(80, 14)] },
   fairing: { label: 'Fairing', params: [n('diameter', 'Diameter', 'm', 1.2, 0.2, 10, 0.01), ...massX(90, 1)] },
   // ---------- spacecraft ----------
   bus: { label: 'Bus', params: [t('form', 'Form factor', '6U'), n('power', 'Average power', 'W', 30, 0, 1e5, 1), ...massX(10, 0.15)] },
@@ -89,7 +89,7 @@ export const VEHICLE_CLASSES = {
   'fixed-wing': { label: 'Fixed-wing', implemented: true, types: ['fuselage', 'wing', 'htail', 'vtail', 'propulsor', 'battery', 'payload', 'avionics', 'systems'] },
   rotorcraft: { label: 'Rotorcraft & eVTOL', implemented: true, types: ['fuselage', 'wing', 'htail', 'vtail', 'rotor', 'propulsor', 'battery', 'payload', 'avionics', 'systems'] },
   'high-speed': { label: 'High-speed', implemented: false, types: ['fuselage', 'wing', 'htail', 'vtail', 'inlet', 'turbofan', 'payload', 'avionics', 'systems'] },
-  'launch-vehicle': { label: 'Launch vehicles', implemented: false, types: ['stage', 'rocketEngine', 'fairing', 'payload', 'avionics', 'systems'] },
+  'launch-vehicle': { label: 'Launch vehicles', implemented: true, types: ['stage', 'rocketEngine', 'fairing', 'payload', 'avionics', 'systems'] },
   spacecraft: { label: 'Spacecraft', implemented: false, types: ['bus', 'solarArray', 'thruster', 'battery', 'payload', 'avionics'] },
   sailplane: { label: 'Sailplanes', implemented: true, types: ['fuselage', 'wing', 'htail', 'vtail', 'payload', 'avionics', 'systems'] },
 };
@@ -99,6 +99,9 @@ export const REQUIREMENT_OPS = ['>=', '<='];
 // Mission settings a fixed-wing document carries besides its segments: field elevation (m, ISA) and the hotel load
 // (W drawn all flight by the avionics and payload)
 export const MISSION_DEFAULTS = { fieldElevation: 0, hotelPower: 0 };
+// a launch vehicle's mission: target circular orbit (km), inclination and launch-site latitude (°), payload (kg), and the
+// flight-path angle (°) the first stage burns out at (the pitch kick is solved for it)
+export const LAUNCH_DEFAULTS = { orbitAltitude: 500, inclination: 97.4, latitude: 0, payload: 300, stage1Angle: 22 };
 export const MISSION_SETTINGS = [
   { key: 'fieldElevation', label: 'Field elevation', unit: 'm', min: 0, max: 5000, step: 10 },
   { key: 'hotelPower', label: 'Hotel load', unit: 'W', min: 0, max: 1e5, step: 1 },
@@ -141,6 +144,7 @@ export function upgrade(doc) {
     if (!Array.isArray(doc.mission.segments)) doc.mission.segments = defaultSegments(doc.mission, doc.class);
     for (const [k, v] of Object.entries(MISSION_DEFAULTS)) if (doc.mission[k] === undefined) doc.mission[k] = v;
   }
+  if (doc.class === 'launch-vehicle' && doc.mission) for (const [k, v] of Object.entries(LAUNCH_DEFAULTS)) if (doc.mission[k] === undefined) doc.mission[k] = v;
   return doc;
 }
 

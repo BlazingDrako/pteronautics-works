@@ -13,7 +13,7 @@ import { optimize } from '../analyses/optimize.js';
 import { chart, extent } from './charts.js';
 
 const KEY = 'works-opt:';
-const DEFAULT_VARS = { 'fixed-wing': ['wing.span', 'wing.rootChord', 'battery.energy', 'wing.x'], sailplane: ['wing.span', 'wing.rootChord', 'wing.taper', 'wing.x'], rotorcraft: ['rotor.radius', 'battery.energy', 'wing.rootChord', 'mission.cruiseSpeed'] };
+const DEFAULT_VARS = { 'fixed-wing': ['wing.span', 'wing.rootChord', 'battery.energy', 'wing.x'], sailplane: ['wing.span', 'wing.rootChord', 'wing.taper', 'wing.x'], rotorcraft: ['rotor.radius', 'battery.energy', 'wing.rootChord', 'mission.cruiseSpeed'], 'launch-vehicle': ['stage1.propellant', 'stage2.propellant', 'mission.stage1Angle'] };
 
 export function renderOptimize(root, doc) {
   const vars = tradeVariables(doc), metrics = metricsFor(doc);

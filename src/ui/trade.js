@@ -19,8 +19,8 @@ const LIMITS = { sweep: [3, 41], map: [3, 25] };
 
 function defaults(doc) {
   const vars = tradeVariables(doc), has = p => vars.some(v => v.path === p);
-  const px = has('wing.span') ? 'wing.span' : vars[0].path;
-  const py = has('wing.rootChord') ? 'wing.rootChord' : vars.find(v => v.path !== px).path;
+  const px = has('wing.span') ? 'wing.span' : has('stage2.propellant') ? 'stage2.propellant' : vars[0].path;
+  const py = has('wing.rootChord') ? 'wing.rootChord' : has('stage1.propellant') ? 'stage1.propellant' : vars.find(v => v.path !== px).path;
   const axis = (path, n) => ({ path, ...defaultRange(doc, variableInfo(doc, path)), n });
   const reqMetrics = [...new Set((doc.requirements || []).map(r => r.metric))], main = MAIN_METRIC[doc.class] || reqMetrics[0];
   return {

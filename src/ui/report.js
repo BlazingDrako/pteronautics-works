@@ -49,6 +49,7 @@ export function renderReport(root, doc) {
     const summary = [
       `${doc.name} is ${/^([aeiou]|8|11\b|18\b|80)/i.test(doc.role || '') ? 'an' : 'a'} ${(r => r.charAt(0).toLowerCase() + r.slice(1))(doc.role || VEHICLE_CLASSES[doc.class]?.label || 'vehicle')}`,
       m && g ? ` of ${fx(m.total, 2)} kg takeoff mass and ${fx(g.span, 2)} m span (aspect ratio ${fx(g.AR, 1)}).` : '.',
+      o.orbit ? ` It lifts off at ${fx(o.stack.liftoff / 1000, 1)} t and can carry ${fx(o.orbit.payloadCapacity, 0)} kg to a ${fx(o.orbit.altitude, 0)} km orbit at ${fx(o.orbit.inclination, 1)}° (Δv margin ${minus(fx(o.orbit.dvMargin, 0))} m/s).` : '',
       gl ? ` It glides at ${fx(gl.LDmax, 1)} to 1 at ${fx(gl.Vmd * 3.6, 0)} km/h, sinks ${fx(gl.minSink, 2)} m/s at best, and averages ${fx(gl.xcSpeed, 0)} km/h across country in ${fx(gl.Wc, 1)} m/s thermals.` : '',
       p ? ` It stalls at ${fx(p.Vs, 1)} m/s, reaches a lift-to-drag ratio of ${fx(p.LDmax, 1)}, and flies for ${fx(p.endurance, 0)} min at its best-endurance speed.` : '',
       ms && isFinite(ms.margin) ? ` Its ${ms.segments.length}-segment mission takes ${fx(ms.duration, 0)} min and leaves ${fx(ms.margin, 1)}% of usable energy after the reserve.` : ms ? ' Its mission cannot be flown as planned.' : '',
@@ -112,6 +113,17 @@ export function renderReport(root, doc) {
           series: [{ pts: p.curve.map(c => [c.V, c.Pel]), cls: 's-accent' }, { pts: p.curve.map(c => [c.V, c.Preq]), cls: 's-muted' }, { pts: p.curve.map(c => [c.V, c.Pav]), cls: 's-good' }],
           legend: [{ label: 'Battery power', cls: 's-accent' }, { label: 'Power required', cls: 's-muted' }, { label: 'Shaft power available', cls: 's-good' }],
           marks: [{ x: p.Vs, label: 'stall', cls: 's-warn' }, { x: p.Vend, label: 'best endurance', cls: 's-warn', row: 1 }, { x: p.cruise.V, label: 'cruise', cls: 's-hl', row: 2, color: 'var(--hl)' }] }))));
+    }
+
+    // launch vehicle
+    if (o.orbit && o.staging && o.ascent) {
+      const or = o.orbit, a = o.ascent;
+      parts.push(sec(0, 'Launch performance', h('p', {}, `Ideal Δv ${fx(or.dvIdeal, 0)} m/s against ${fx(or.dvRequired, 0)} m/s required for a ${fx(or.altitude, 0)} km circular orbit at ${fx(or.inclination, 1)}° (orbital speed ${fx(or.vCirc, 0)} m/s, gravity loss ${fx(a.gravityLoss, 0)}, drag loss ${fx(a.dragLoss, 0)}, Earth rotation ${minus(fx(or.rotation, 0))} m/s): payload capacity ${fx(or.payloadCapacity, 0)} kg.`),
+        table(['Stage', 'Mass at ignition', 'Propellant', 'Mass ratio', 'Isp', 'T/W', 'Ideal Δv'], o.staging.stages.map(r => [r.name, `${fx(r.m0, 0)} kg`, `${fx(r.prop, 0)} kg`, fx(r.MR, 2), `${fx(r.ispEff, 0)} s`, fx(r.TW0, 2), `${fx(r.dv, 0)} m/s`]), 'rp-num'),
+        fig(1, 'Ascent trajectory: altitude against downrange distance, with the stage events.', chart({ w: 720, h: 240, x: [0, Math.max(...a.track.map(p => p.x)) / 1000 * 1.04], y: [0, Math.max(...a.track.map(p => p.h), or.altitude * 1000) / 1000 * 1.1], xLabel: 'Downrange (km)', yLabel: 'Altitude (km)',
+          series: [{ pts: a.track.map(p => [p.x / 1000, p.h / 1000]), cls: 's-accent' }], hlines: [{ y: or.altitude, label: 'target orbit', cls: 's-target', color: 'var(--text-2)' }], points: a.events.map(e => ({ x: e.x / 1000, y: e.h / 1000, color: 'var(--hl)' })) })),
+        table(['Event', 'Time', 'Altitude', 'Speed'], a.events.map(e => [e.name, `T+${fx(e.t, 0)} s`, `${fx(e.h / 1000, 1)} km`, `${fx(e.v, 0)} m/s`]), 'rp-num'),
+        h('p', {}, `Max-Q ${fx(a.qmax / 1000, 1)} kPa at ${fx(a.hq / 1000, 1)} km; peak acceleration ${fx(a.gmax, 2)} g.`)));
     }
 
     // hover (eVTOL)

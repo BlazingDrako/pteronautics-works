@@ -46,8 +46,8 @@ function route() {
   if (m[2] === '/requirements' && live) { document.title = `${doc.name} requirements · Pteronautics Works`; return renderRequirements(root, doc); }
   if (m[2] === '/mission' && (doc.class === 'fixed-wing' || doc.class === 'rotorcraft')) { document.title = `${doc.name} mission · Pteronautics Works`; return renderMission(root, doc); }
   document.title = `${doc.name} · Pteronautics Works`;
-  if (live) renderWorkspace(root, doc);
-  else renderLauncher(root, doc);
+  if (doc.class === 'launch-vehicle') renderLauncher(root, doc);
+  else renderWorkspace(root, doc);
 }
 
 addEventListener('hashchange', route);
