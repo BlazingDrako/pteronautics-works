@@ -69,6 +69,7 @@ export function renderWorkspace(root, doc) {
       revPill,
       glider ? null : h('a', { class: 'btn small', href: `#/v/${doc.id}/mission`, title: 'Plan the mission profile: climb, transits, survey, reserve' }, icon('mission'), 'Mission'),
       h('a', { class: 'btn small', href: `#/v/${doc.id}/trade`, title: 'Sweep design values through the coupled analyses' }, icon('bars'), 'Trade study'),
+      h('a', { class: 'btn small', href: `#/v/${doc.id}/compare`, title: 'Save snapshots and compare designs side by side' }, icon('grid'), 'Compare'),
       h('a', { class: 'btn small', href: `#/v/${doc.id}/report`, title: 'A printable report of the current design' }, icon('doc'), 'Report'),
       h('button', { class: 'btn small', type: 'button', title: 'Download this vehicle as a .json file', onclick: () => downloadVehicle(doc) }, icon('download'), 'Save .json'),
       h('button', { class: 'btn small', type: 'button', title: 'Replace this vehicle with one from a .json file', onclick: loadFile }, icon('upload'), 'Load .json'),
