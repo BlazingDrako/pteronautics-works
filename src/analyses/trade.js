@@ -8,7 +8,9 @@
 // edited path reaches (a battery-mass sample skips geometry and aero). Nothing here touches the DOM; the trade page
 // draws the results.
 import { CouplingGraph } from '../engine/graph.js';
-import { COMPONENT_TYPES, applyEdit, clone, getPath, firstOf } from '../model/vehicle.js';
+import { COMPONENT_TYPES, applyEdit, clone, getPath, firstOf, MISSION_SETTINGS } from '../model/vehicle.js';
+import { SEGMENT_KINDS } from '../model/segments.js';
+import { analysisNodes, hasGraph } from './classes.js';
 import { evaluateRequirements, readMetric } from './requirements.js';
 
 // Outputs worth trading on, with how to show them; better: 1 more is better, −1 less is, 0 neither. Requirement metrics not listed here are added by metricsFor().
@@ -24,6 +26,12 @@ export const TRADE_METRICS = [
   { metric: 'performance.RoC', label: 'Best rate of climb', unit: 'm/s', d: 2, better: 1 },
   { metric: 'performance.Vmax', label: 'Max level speed', unit: 'm/s', d: 1, better: 1 },
   { metric: 'performance.LDmax', label: 'Max lift-to-drag', unit: '', d: 1, better: 1 },
+  { metric: 'glide.LDmax', label: 'Best glide ratio', unit: '', d: 1, better: 1 },
+  { metric: 'glide.minSink', label: 'Minimum sink', unit: 'm/s', d: 3, better: -1 },
+  { metric: 'glide.xcSpeed', label: 'Cross-country speed', unit: 'km/h', d: 1, better: 1 },
+  { metric: 'glide.Vs', label: 'Stall speed, 1 g', unit: 'm/s', d: 1, better: -1 },
+  { metric: 'glide.Vmd', label: 'Best-glide speed', unit: 'm/s', d: 1, better: 0 },
+  { metric: 'glide.wingLoading', label: 'Wing loading', unit: 'kg/m²', d: 1, better: 0 },
   { metric: 'stability.SM', label: 'Static margin', unit: '% MAC', d: 1, better: 0 },
   { metric: 'stability.drZeta', label: 'Dutch roll damping ζ', unit: '', d: 3, better: 1 },
   { metric: 'stability.spZeta', label: 'Short period damping ζ', unit: '', d: 2, better: 0 },
@@ -39,7 +47,9 @@ export const TRADE_METRICS = [
 
 // The metrics a study of this vehicle can show: the list above plus any requirement metric it lacks
 export function metricsFor(doc) {
-  const out = TRADE_METRICS.slice();
+  // only outputs of the nodes this vehicle's graph has
+  let ids = null; try { if (hasGraph(doc)) ids = new Set(analysisNodes(doc).map(n => n.id)); } catch { }
+  const out = TRADE_METRICS.filter(m => !ids || ids.has(m.metric.split('.')[0]));
   for (const r of doc.requirements || []) if (!out.some(m => m.metric === r.metric)) out.push({ metric: r.metric, label: r.title, unit: r.unit || '', d: 3, better: r.op === '>=' ? 1 : -1 });
   return out;
 }
@@ -62,6 +72,12 @@ export function tradeVariables(doc) {
       out.push({ path: `${c.id}.${p.key}`, label: p.label, group: c.name, unit: p.unit || '', value: c[p.key], min: p.min, max: p.max, step: p.step });
   }
   for (const m of MISSION_VARS) out.push({ path: 'mission.' + m.key, label: m.label, group: 'Flight condition', unit: m.unit, value: doc.mission?.[m.key] ?? 0, min: m.min, max: m.max, step: m.step });
+  // the mission: its settings and each segment's values
+  if (Array.isArray(doc.mission?.segments)) {
+    for (const m of MISSION_SETTINGS) if (typeof doc.mission[m.key] === 'number') out.push({ path: 'mission.' + m.key, label: m.label, group: 'Mission', unit: m.unit, value: doc.mission[m.key], min: m.min, max: m.max, step: m.step });
+    for (const sg of doc.mission.segments) for (const p of SEGMENT_KINDS[sg.kind]?.params || [])
+      out.push({ path: `mission.segments.${sg.id}.${p.key}`, label: p.label, group: `Mission · ${sg.name || SEGMENT_KINDS[sg.kind].label}`, unit: p.unit, value: sg[p.key], min: p.min, max: p.max, step: p.step });
+  }
   return out;
 }
 export const variableInfo = (doc, path) => tradeVariables(doc).find(v => v.path === path) || null;

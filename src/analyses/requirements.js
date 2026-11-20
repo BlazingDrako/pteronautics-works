@@ -22,3 +22,10 @@ export function evaluate(req, value) {
 export function evaluateRequirements(reqs, outputs) {
   return reqs.map(r => evaluate(r, readMetric(outputs, r.metric)));
 }
+
+// The next free id in the R-nn series (one past the highest used)
+export function nextRequirementId(reqs) {
+  const nums = reqs.map(r => +(/^R-(\d+)$/.exec(r.id) || [])[1]).filter(isFinite);
+  const k = (nums.length ? Math.max(...nums) : 0) + 1;
+  return 'R-' + String(k).padStart(2, '0');
+}

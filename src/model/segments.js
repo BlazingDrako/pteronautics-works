@@ -8,15 +8,16 @@
 //   descent  to an altitude, gliding at the best lift-to-drag speed with the motor off
 //   reserve  a time at the best-endurance speed, kept in the battery at landing
 //
-// Altitudes are ISA altitudes in m (the flight starts at 0 m), distances in km, times in min, speeds in m/s.
+// Heights are in m above the field (the flight starts on it; the air is ISA at field elevation + height), distances
+// in km, times in min, speeds in m/s.
 
 const n = (key, label, unit, def, min, max, step) => ({ key, label, unit, def, min, max, step });
 
 export const SEGMENT_KINDS = {
-  climb: { label: 'Climb', note: 'full power at the best-climb speed', params: [n('to', 'To altitude', 'm', 400, 0, 8000, 10)] },
+  climb: { label: 'Climb', note: 'full power at the best-climb speed', params: [n('to', 'To height', 'm', 400, 0, 8000, 10)] },
   cruise: { label: 'Cruise', note: 'a distance at an airspeed', params: [n('distance', 'Distance', 'km', 20, 0.1, 5000, 0.1), n('speed', 'Airspeed', 'm/s', 22, 3, 300, 0.5), n('wind', 'Headwind', 'm/s', 0, -40, 40, 0.5)] },
   loiter: { label: 'Loiter', note: 'a time at an airspeed', params: [n('time', 'Time', 'min', 45, 0.5, 6000, 0.5), n('speed', 'Airspeed', 'm/s', 20, 3, 300, 0.5)] },
-  descent: { label: 'Descent', note: 'glide at the best L/D speed, motor off', params: [n('to', 'To altitude', 'm', 0, 0, 8000, 10)] },
+  descent: { label: 'Descent', note: 'glide at the best L/D speed, motor off', params: [n('to', 'To height', 'm', 0, 0, 8000, 10)] },
   reserve: { label: 'Reserve', note: 'held at landing, sized at the best-endurance speed', params: [n('time', 'Time', 'min', 10, 0, 600, 0.5)] },
 };
 

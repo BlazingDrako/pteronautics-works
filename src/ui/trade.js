@@ -4,7 +4,9 @@
 import { h, s, icon, brand, themeButton, fx, fsig, pct, minus, toast } from './dom.js';
 import { applyEdit, getPath } from '../model/vehicle.js';
 import { saveVehicle } from '../model/store.js';
-import { fixedWingNodes, AERO_LEVELS, SECTION_LEVELS } from '../analyses/fixedWing.js';
+import { noteEdit } from '../model/history.js';
+import { AERO_LEVELS, SECTION_LEVELS } from '../analyses/fixedWing.js';
+import { analysisNodes, MAIN_METRIC } from '../analyses/classes.js';
 import {
   runStudy, runSensitivity, linspace, tradeVariables, variableInfo, defaultRange, metricsFor, metricInfo,
   feasibleRanges, worstMargin, contourZero, SENSITIVITY_DEFAULTS,
@@ -20,12 +22,12 @@ function defaults(doc) {
   const px = has('wing.span') ? 'wing.span' : vars[0].path;
   const py = has('wing.rootChord') ? 'wing.rootChord' : vars.find(v => v.path !== px).path;
   const axis = (path, n) => ({ path, ...defaultRange(doc, variableInfo(doc, path)), n });
-  const reqMetrics = [...new Set((doc.requirements || []).map(r => r.metric))];
+  const reqMetrics = [...new Set((doc.requirements || []).map(r => r.metric))], main = MAIN_METRIC[doc.class] || reqMetrics[0];
   return {
     mode: 'sweep',
-    sweep: { ...axis(px, 13), metrics: reqMetrics.length ? reqMetrics : ['performance.endurance', 'performance.Vs', 'stability.SM'] },
-    map: { x: axis(px, 13), y: axis(py, 11), metric: 'performance.endurance' },
-    sens: { metric: 'performance.endurance', frac: 10, paths: SENSITIVITY_DEFAULTS.filter(has) },
+    sweep: { ...axis(px, 13), metrics: reqMetrics.length ? reqMetrics : [main, 'stability.SM'] },
+    map: { x: axis(px, 13), y: axis(py, 11), metric: main },
+    sens: { metric: main, frac: 10, paths: SENSITIVITY_DEFAULTS.filter(has) },
     fid: { aero: 'vlm', sections: 'thin' },
   };
 }
@@ -79,10 +81,10 @@ export function renderTrade(root, doc) {
     let r;
     try {
       if (mode === 'sens') {
-        r = await runSensitivity({ doc, nodes: fixedWingNodes(), fidelity, paths: st.sens.paths, metric: st.sens.metric, frac: st.sens.frac / 100, signal: me, onProgress: progress });
+        r = await runSensitivity({ doc, nodes: analysisNodes(doc), fidelity, paths: st.sens.paths, metric: st.sens.metric, frac: st.sens.frac / 100, signal: me, onProgress: progress });
       } else {
         const ax = mode === 'sweep' ? [st.sweep] : [st.map.x, st.map.y];
-        r = await runStudy({ doc, nodes: fixedWingNodes(), fidelity, axes: ax.map(a => ({ path: a.path, values: linspace(a.from, a.to, a.n).map(v => +v.toPrecision(10)) })), signal: me, onProgress: progress });
+        r = await runStudy({ doc, nodes: analysisNodes(doc), fidelity, axes: ax.map(a => ({ path: a.path, values: linspace(a.from, a.to, a.n).map(v => +v.toPrecision(10)) })), signal: me, onProgress: progress });
       }
     } catch (e) { if (job === me) { paintStatus(''); out.classList.remove('busy'); out.replaceChildren(h('div', { class: 'placeholder' }, 'The study could not run: ' + e.message)); } return; }
     if (!r || job !== me) return;
@@ -279,6 +281,7 @@ export function renderTrade(root, doc) {
   function apply(at) {
     for (const [p, v] of at) applyEdit(doc, p, v);
     doc.updated = new Date().toISOString();
+    noteEdit(doc.id, 'Trade study applied: ' + at.map(([p, v]) => `${vlabel(p, false)} ${vfmt(p, v)}`).join(', '));
     saveVehicle(doc);
     toast(`${doc.name}: ${at.map(([p, v]) => `${vlabel(p, false)} ${vfmt(p, v)}`).join(', ')}. The workspace shows the new design.`);
     paintSetup(); changed({ now: true });

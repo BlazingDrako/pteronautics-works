@@ -4,7 +4,9 @@
 // change to the airframe there shows here, and a segment edited here reaches the requirements there.
 import { h, icon, brand, themeButton, fx, toast } from './dom.js';
 import { saveVehicle } from '../model/store.js';
+import { noteEdit, recordStatuses } from '../model/history.js';
 import { SEGMENT_KINDS, makeSegment, newSegmentId } from '../model/segments.js';
+import { MISSION_SETTINGS, firstOf } from '../model/vehicle.js';
 import { CouplingGraph } from '../engine/graph.js';
 import { fixedWingNodes } from '../analyses/fixedWing.js';
 import { graphSummary } from './graphView.js';
@@ -31,12 +33,13 @@ export function renderMission(root, doc) {
       h('span', { class: 'grow' }), status, themeButton('btn small')),
     h('div', { class: 'tr-main' }, h('aside', { class: 'col', 'aria-label': 'Mission segments' }, editor), h('section', { class: 'tr-results', 'aria-label': 'Mission results' }, out))));
 
-  graph.on(ev => { const sm = graphSummary(graph); status.className = 'pill ' + sm.cls; status.textContent = 'Analyses ' + sm.text; if (ev.done) { out.classList.toggle('busy', !graph.isCurrent()); paintResults(); } });
+  graph.on(ev => { const sm = graphSummary(graph); status.className = 'pill ' + sm.cls; status.textContent = 'Analyses ' + sm.text; if (ev.done) { out.classList.toggle('busy', !graph.isCurrent()); const rq = graph.outputs('requirements'); if (rq) recordStatuses(doc.id, rq.list); paintResults(); } });
   addEventListener('themechange', () => { if (out.isConnected) paintResults(); });
 
-  function commit({ structure = false } = {}) {
+  function commit({ structure = false, cause = 'Mission profile edited', path = 'mission.segments' } = {}) {
     doc.updated = new Date().toISOString();
-    graph.invalidate('mission.segments');
+    noteEdit(doc.id, cause);
+    graph.invalidate(path);
     if (structure) paintEditor();
     out.classList.add('busy');
     graph.run(doc);
@@ -48,7 +51,18 @@ export function renderMission(root, doc) {
     const list = segs();
     editor.replaceChildren(
       h('div', { class: 'sec-row' }, h('span', { class: 'sec' }, 'Mission profile'), h('span', { class: 'muted', style: { fontSize: '12px' } }, `${list.length} segments`)),
-      h('p', { class: 'note', style: { margin: '0 0 12px' } }, 'The flight starts on the ground at 0 m (ISA). Each segment starts where the one before it ends.'),
+      h('p', { class: 'note', style: { margin: '0 0 12px' } }, 'The flight starts on the field. Heights are above it; the air is ISA at field elevation + height. Each segment starts where the one before it ends.'),
+      h('div', { class: 'ms-seg ms-settings' }, h('div', { class: 'ms-seg-head' }, h('span', { class: 'ms-kind', style: { color: 'var(--text-2)' } }, 'Settings')),
+        h('div', { class: 'ms-fields' }, MISSION_SETTINGS.map(p => {
+          const inp = h('input', { class: 'num', type: 'number', min: p.min, max: p.max, step: p.step, value: doc.mission[p.key] ?? 0, 'aria-label': `${p.label} (${p.unit})` });
+          inp.addEventListener('change', () => {
+            const v = +inp.value;
+            if (inp.value === '' || !isFinite(v) || v < p.min || v > p.max) { inp.classList.add('invalid'); toast(`${p.label} must be between ${p.min} and ${p.max} ${p.unit}`, true); return; }
+            inp.classList.remove('invalid'); doc.mission[p.key] = v; commit({ cause: `Mission · ${p.label} → ${v} ${p.unit}`, path: 'mission.' + p.key });
+          });
+          return h('label', { class: 'tr-num' }, h('span', {}, `${p.label} (${p.unit})`), inp);
+        })),
+        h('div', { class: 'ms-note' }, packNote())),
       ...list.map((sg, i) => segCard(sg, i, list.length)),
       h('div', { class: 'sec', style: { margin: '14px 0 6px' } }, 'Add a segment'),
       h('div', { class: 'tr-chips' }, KIND_ORDER.map(k => h('button', { class: 'tg sm', type: 'button', title: SEGMENT_KINDS[k].note, onclick: () => add(k) }, '+ ' + SEGMENT_KINDS[k].label))));
@@ -67,11 +81,15 @@ export function renderMission(root, doc) {
         inp.addEventListener('change', () => {
           const v = +inp.value;
           if (inp.value === '' || !isFinite(v) || v < p.min || v > p.max) { inp.classList.add('invalid'); toast(`${p.label} must be between ${p.min} and ${p.max} ${p.unit}`, true); return; }
-          inp.classList.remove('invalid'); sg[p.key] = v; commit();
+          inp.classList.remove('invalid'); sg[p.key] = v; commit({ cause: `Mission · ${sg.name || K.label} · ${p.label} → ${v} ${p.unit}` });
         });
         return h('label', { class: 'tr-num' }, h('span', {}, `${p.label} (${p.unit})`), inp);
       })),
       h('div', { class: 'ms-note' }, K.note));
+  }
+  function packNote() {
+    const b = firstOf(doc, 'battery');
+    return b ? `Hotel load: avionics and payload, drawn all flight. The pack (${b.voltage} V, ${b.resistance * 1000} mΩ) is set on the battery in the workspace.` : 'Hotel load: avionics and payload, drawn all flight.';
   }
   function add(kind) {
     const list = segs(), sg = makeSegment(kind, newSegmentId(list));
@@ -79,10 +97,10 @@ export function renderMission(root, doc) {
     // new flying segments go before a trailing reserve
     let at = list.length; while (kind !== 'reserve' && at > 0 && list[at - 1].kind === 'reserve') at--;
     list.splice(at, 0, sg);
-    commit({ structure: true });
+    commit({ structure: true, cause: `Mission · added a ${SEGMENT_KINDS[kind].label.toLowerCase()} segment` });
   }
   function move(i, d) { const list = segs(), [x] = list.splice(i, 1); list.splice(i + d, 0, x); commit({ structure: true }); }
-  function remove(i) { segs().splice(i, 1); commit({ structure: true }); }
+  function remove(i) { const [x] = segs().splice(i, 1); commit({ structure: true, cause: `Mission · removed ${x.name || SEGMENT_KINDS[x.kind].label}` }); }
 
   // ---------- results ----------
   function paintResults() {
@@ -102,7 +120,7 @@ export function renderMission(root, doc) {
       h('h3', {}, isFinite(m.energy)
         ? [`Uses `, h('b', { class: 'mono' }, `${fx(m.energy, 0)} Wh`), ` of ${fx(m.usable, 0)} Wh usable · `, h('span', { class: cls }, m.margin >= 0 ? `${fx(m.margin, 1)}% left after the reserve` : `${fx(-m.margin, 1)}% short`)]
         : h('span', { class: 'bad' }, `${m.errors.length === 1 ? 'A segment' : m.errors.length + ' segments'} cannot be flown`)),
-      h('p', { class: 'note' }, `${fx(tEnd, 0)} min and ${fx(m.distance, 1)} km in the air, ${fx(m.reserve, 0)} Wh held as reserve. `,
+      h('p', { class: 'note' }, `${fx(tEnd, 0)} min and ${fx(m.distance, 1)} km in the air, ${fx(m.reserve, 0)} Wh held as reserve; ${fx(m.hotelEnergy, 0)} Wh to the hotel load and ${fx(m.loss, 1)} Wh lost in the pack. `,
         mass ? `Flown at ${fx(mass.total, 2)} kg. ` : '', req ? `${req.id} (≥ ${req.target}%): ${req.status === 'fail' ? 'failing' : req.status}. ` : '',
         h('a', { href: '#/v/' + doc.id }, 'Change the airframe in the workspace'), ' — the mission follows it.'),
       m.errors.length ? h('ul', { class: 'ms-errors' }, m.errors.map(e => h('li', {}, e))) : null,
@@ -110,7 +128,7 @@ export function renderMission(root, doc) {
 
     // altitude and energy through the flight
     const zs = m.track.map(p => p.z), left = m.track.map(p => m.usable - p.E);
-    const alt = chart({ w: 900, h: 230, x: [0, Math.max(tEnd, 1)], y: [0, Math.max(...zs, 50) * 1.18], xLabel: 'Time (min)', yLabel: 'Altitude (m)', label: 'Altitude through the mission',
+    const alt = chart({ w: 900, h: 230, x: [0, Math.max(tEnd, 1)], y: [0, Math.max(...zs, 50) * 1.18], xLabel: 'Time (min)', yLabel: m.field ? `Height above the field (m), field ${fx(m.field, 0)} m` : 'Height (m)', label: 'Height through the mission',
       series: [{ pts: m.track.map(p => [p.t / 60, p.z]), cls: 's-accent' }], marks });
     const yr = extent([...left, 0, m.reserve], 0.06); yr[0] = Math.min(yr[0], 0);
     const en = chart({ w: 900, h: 230, x: [0, Math.max(tEnd, 1)], y: yr, xLabel: 'Time (min)', yLabel: 'Usable energy left (Wh)', label: 'Battery energy left through the mission',
@@ -120,7 +138,7 @@ export function renderMission(root, doc) {
     // per segment
     const T = (a, b) => b - a;
     const table = h('div', { class: 'mx-wrap' }, h('table', { class: 'rq ms-table' },
-      h('thead', {}, h('tr', {}, ['#', 'Segment', 'Time', 'Distance', 'Altitude', 'Airspeed', 'Battery power', 'Energy', 'Left after'].map(t => h('th', {}, t)))),
+      h('thead', {}, h('tr', {}, ['#', 'Segment', 'Time', 'Distance', 'Height', 'Airspeed', 'Battery power', 'Energy', 'Left after'].map(t => h('th', {}, t)))),
       h('tbody', {}, (() => {
         let used = 0;
         return m.segments.map((s, k) => {
@@ -141,12 +159,13 @@ export function renderMission(root, doc) {
 
     const kv = (k, v) => h('div', {}, h('span', {}, k), h('b', {}, v));
     out.replaceChildren(head,
-      h('div', { class: 'plot-card' }, h('h4', {}, 'Altitude', h('span', { class: 'sub' }, 'climbs at full power and the best-climb speed; descents glide at best L/D')), alt),
+      h('div', { class: 'plot-card' }, h('h4', {}, 'Height', h('span', { class: 'sub' }, 'climbs at full power and the best-climb speed; descents glide at best L/D')), alt),
       h('div', { class: 'plot-card' }, h('h4', {}, 'Battery energy left', h('span', { class: 'sub' }, 'usable energy; the shaded band is the reserve')), en),
       h('div', { class: 'plot-card' }, h('h4', {}, 'Segments'), table),
       h('div', { class: 'kv' },
         kv('Flight time', `${fx(tEnd, 0)} min`), kv('Distance flown', `${fx(m.distance, 1)} km`), kv('Energy flown', `${fx(m.flown, 0)} Wh`), kv('Reserve', `${fx(m.reserve, 0)} Wh`),
         kv('Usable energy', `${fx(m.usable, 0)} Wh`), kv('Peak battery power', `${fx(m.maxPower, 0)} W`),
+        kv('Hotel load energy', `${fx(m.hotelEnergy, 0)} Wh`), kv('Pack losses (I²R)', `${fx(m.loss, 1)} Wh`), kv('Peak current', `${fx(m.maxCurrent, 0)} A`),
         perf ? kv('Best-endurance speed', `${fx(perf.Vend, 1)} m/s`) : null, perf ? kv('Stall speed, 1 g', `${fx(perf.Vs, 1)} m/s`) : null));
   }
   // the usable energy split by segment, with what is left

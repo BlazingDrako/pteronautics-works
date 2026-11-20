@@ -4,8 +4,10 @@ import { h, s, icon, brand, themeButton, fx, fsig, pct, minus, ago, toast } from
 import { COMPONENT_TYPES, VEHICLE_CLASSES, applyEdit, firstOf, getPath, LINKS } from '../model/vehicle.js';
 import { saveVehicle, downloadVehicle, pickVehicleFile, resetVehicle, isModified } from '../model/store.js';
 import { seeds } from '../model/seeds.js';
+import { noteEdit, recordStatuses, describeEdit } from '../model/history.js';
 import { CouplingGraph } from '../engine/graph.js';
-import { fixedWingNodes, AERO_LEVELS, SECTION_LEVELS } from '../analyses/fixedWing.js';
+import { AERO_LEVELS, SECTION_LEVELS } from '../analyses/fixedWing.js';
+import { analysisNodes } from '../analyses/classes.js';
 import { vehicleView } from './planform.js';
 import { mountView3d, defaultCamera } from './view3d.js';
 import { createAirfoilLab } from './airfoilLab.js';
@@ -24,9 +26,17 @@ const MISSION_FIELDS = [
   { key: 'altitude', label: 'Altitude (ISA)', unit: 'm', min: 0, max: 6000, step: 10, smin: 0, smax: 4000 },
   { key: 'dT', label: 'ISA deviation', unit: 'K', min: -40, max: 40, step: 1, smin: -30, smax: 30 },
 ];
+// a sailplane's flight condition: the speed the stability is trimmed at, and the thermals it climbs in
+const GLIDER_FIELDS = [
+  { key: 'cruiseSpeed', label: 'Trim speed (stability)', unit: 'm/s', min: 10, max: 80, step: 0.5, smin: 18, smax: 50 },
+  { key: 'climbRate', label: 'Average thermal climb', unit: 'm/s', min: 0.2, max: 6, step: 0.1, smin: 0.5, smax: 4 },
+  { key: 'altitude', label: 'Altitude (ISA)', unit: 'm', min: 0, max: 8000, step: 10, smin: 0, smax: 4000 },
+  { key: 'dT', label: 'ISA deviation', unit: 'K', min: -40, max: 40, step: 1, smin: -30, smax: 30 },
+];
 
 export function renderWorkspace(root, doc) {
-  const graph = new CouplingGraph(fixedWingNodes());
+  const graph = new CouplingGraph(analysisNodes(doc));
+  const glider = doc.class === 'sailplane';
   const ui = { sel: 'wing', level: 'vehicle', view: 'top', cam: defaultCamera(), layers: { clmap: true, load: true, mac: true, cg: true, items: false, lenses: true } };
   let saveTimer = null;
 
@@ -56,8 +66,9 @@ export function renderWorkspace(root, doc) {
         h('a', { class: 'vtab', href: '#/v/vireo-2', role: 'tab', 'aria-selected': 'false' }, 'Vireo-2')),
       h('span', { class: 'grow' }),
       revPill,
-      h('a', { class: 'btn small', href: `#/v/${doc.id}/mission`, title: 'Plan the mission profile: climb, transits, survey, reserve' }, icon('mission'), 'Mission'),
+      glider ? null : h('a', { class: 'btn small', href: `#/v/${doc.id}/mission`, title: 'Plan the mission profile: climb, transits, survey, reserve' }, icon('mission'), 'Mission'),
       h('a', { class: 'btn small', href: `#/v/${doc.id}/trade`, title: 'Sweep design values through the coupled analyses' }, icon('bars'), 'Trade study'),
+      h('a', { class: 'btn small', href: `#/v/${doc.id}/report`, title: 'A printable report of the current design' }, icon('doc'), 'Report'),
       h('button', { class: 'btn small', type: 'button', title: 'Download this vehicle as a .json file', onclick: () => downloadVehicle(doc) }, icon('download'), 'Save .json'),
       h('button', { class: 'btn small', type: 'button', title: 'Replace this vehicle with one from a .json file', onclick: loadFile }, icon('upload'), 'Load .json'),
       isSeed ? h('button', { class: 'btn small', type: 'button', title: 'Discard local edits and go back to the seeded design', onclick: reset }, icon('reset'), 'Reset') : null,
@@ -72,6 +83,7 @@ export function renderWorkspace(root, doc) {
 
   // ---------- editing ----------
   function edit(path, value) {
+    noteEdit(doc.id, describeEdit(doc, path, value));
     const changed = applyEdit(doc, path, value);
     doc.updated = new Date().toISOString();
     graph.invalidate(changed);
@@ -86,7 +98,7 @@ export function renderWorkspace(root, doc) {
   }
   function editRequirement(id, target) {
     const r = doc.requirements.find(x => x.id === id); if (!r) return;
-    r.target = target; doc.updated = new Date().toISOString();
+    r.target = target; doc.updated = new Date().toISOString(); noteEdit(doc.id, `${id} target → ${target} ${r.unit || ''}`.trim());
     graph.invalidate('requirements.' + id); run();
     clearTimeout(saveTimer); saveTimer = setTimeout(() => { saveVehicle(doc); paintRev(); }, 250);
   }
@@ -95,7 +107,7 @@ export function renderWorkspace(root, doc) {
     await graph.run(doc);
   }
   addEventListener('themechange', () => { if (canvas.isConnected) paintCanvas(); });
-  graph.on(ev => { paintGraph(); if (ev.done) { canvas.classList.toggle('busy', !graph.isCurrent()); paintOutputs(); } });
+  graph.on(ev => { paintGraph(); if (ev.done) { canvas.classList.toggle('busy', !graph.isCurrent()); const rq = graph.outputs('requirements'); if (rq) recordStatuses(doc.id, rq.list); paintOutputs(); } });
   const lab = createAirfoilLab({ doc, edit });
 
   async function loadFile() {
@@ -206,13 +218,14 @@ export function renderWorkspace(root, doc) {
   }
 
   function paintCondition() {
-    condition.replaceChildren(h('div', { class: 'sec-row' }, h('span', { class: 'sec' }, 'Flight condition'), h('span', { style: { fontSize: '12px', color: 'var(--accent)' } }, 'Cruise')),
-      ...MISSION_FIELDS.map(f => numberField(f.label, f.unit, doc.mission[f.key] ?? 0, f, v => edit('mission.' + f.key, v))),
+    condition.replaceChildren(h('div', { class: 'sec-row' }, h('span', { class: 'sec' }, 'Flight condition'), h('span', { style: { fontSize: '12px', color: 'var(--accent)' } }, glider ? 'Soaring' : 'Cruise')),
+      ...(glider ? GLIDER_FIELDS : MISSION_FIELDS).map(f => numberField(f.label, f.unit, doc.mission[f.key] ?? 0, f, v => edit('mission.' + f.key, v))),
       h('div', { class: 'note', id: 'trim-note' }));
   }
   function paintTrimNote() {
     const n = condition.querySelector('#trim-note'); if (!n) return;
     const st = outputs().stability, p = outputs().performance;
+    if (glider) { n.textContent = st ? `Trimmed at ${fx(doc.mission.cruiseSpeed, 1)} m/s: α ${minus(fx(st.trim.alpha, 1))}°, elevator ${minus(fx(st.trim.de, 1))}° (tail incidence ${minus(fx(st.it, 1))}°, set to trim at 25% MAC).` : 'Trim not available.'; return; }
     n.textContent = st && p ? `Trimmed at α ${minus(fx(st.trim.alpha, 1))}°, elevator ${minus(fx(st.trim.de, 1))}° (tail incidence ${minus(fx(st.it, 1))}°, set to trim at 25% MAC). Shaft power ${fx(p.cruise.P * prop().motorEff, 0)} W, battery draw ${fx(p.cruise.P, 0)} W.` : 'Trim not available.';
   }
   const prop = () => firstOf(doc, 'propulsor') || { motorEff: 1 };
@@ -221,7 +234,7 @@ export function renderWorkspace(root, doc) {
   function paintCrumbs() {
     crumbs.replaceChildren(...LEVELS.flatMap((l, i) => [
       i ? h('span', { class: 'crumb-sep', 'aria-hidden': 'true' }, '›') : null,
-      h('button', { class: 'crumb' + (ui.level === l.id ? ' on' : ''), type: 'button', 'aria-current': ui.level === l.id ? 'true' : null, onclick: () => { ui.level = l.id; paintCrumbs(); paintCanvas(); } }, l.label),
+      h('button', { class: 'crumb' + (ui.level === l.id ? ' on' : ''), type: 'button', 'aria-current': ui.level === l.id ? 'true' : null, onclick: () => { ui.level = l.id; paintCrumbs(); paintCanvas(); } }, glider && l.id === 'mission' ? 'Cross-country' : l.label),
     ]).filter(Boolean));
     const toggles = [['clmap', 'Lift colouring (cℓ / cℓ,max)'], ['load', 'Span load'], ['mac', 'Mean aerodynamic chord'], ['cg', 'CG and neutral point'], ['items', 'Mass items'], ['lenses', 'Lens panels']];
     const focus = h('button', { class: 'tg sm focus-btn' + (ui.focus ? ' on' : ''), type: 'button', 'aria-pressed': ui.focus ? 'true' : 'false', title: 'Hide the side panels so the view fills the window (F)', onclick: toggleFocus }, ui.focus ? 'Exit focus' : 'Focus');
@@ -247,12 +260,12 @@ export function renderWorkspace(root, doc) {
     canvas.classList.toggle('busy', !graph.isCurrent());
     canvas.classList.toggle('v3d-on', ui.level === 'vehicle' && ui.view === '3d');   // 3D draws its own ground grid
     if (ui.level !== 'vehicle') {
-      canvas.replaceChildren(ui.level === 'mission' ? missionPane(out) : ui.level === 'wing' ? wingPane(out) : lab.pane(ui.level, out));
+      canvas.replaceChildren(ui.level === 'mission' ? (glider ? glidePane(out) : missionPane(out)) : ui.level === 'wing' ? wingPane(out) : lab.pane(ui.level, out));
       return;
     }
     // the airframe is drawn at the canvas's own pixel size so it fills the view; lenses float over the right edge
     const holder = h('div', { class: 'view-svg' });
-    const lenses = ui.layers.lenses ? h('div', { class: 'lenses' }, stabilityLens(out), powerLens(out), sectionLens(out)) : null;
+    const lenses = ui.layers.lenses ? h('div', { class: 'lenses' }, stabilityLens(out), glider ? polarLens(out) : powerLens(out), sectionLens(out)) : null;
     canvas.replaceChildren(holder, ...(lenses ? [lenses] : []));
     const overlay = lenses && getComputedStyle(lenses).position === 'absolute';
     const size = { w: holder.clientWidth || 900, h: holder.clientHeight || 640 };
@@ -309,6 +322,38 @@ export function renderWorkspace(root, doc) {
     if (!p) { box.append(h('div', { class: 'cap' }, 'not computed')); return box; }
     box.append(powerCurve(p, 196, 104, true), h('div', { class: 'cap' }, 'Cruise draw ', h('b', {}, `${fx(p.cruise.P, 0)} W`), ' · ', h('b', {}, `${fx(p.cruise.endurance, 0)} min`)), h('div', { class: 'go' }, 'Open mission view →'));
     return box;
+  }
+  // the glide polar (sink against airspeed, drawn downward) with the MacCready tangent from the thermal climb
+  function polarChart(gl, w, hgt, compact) {
+    const xs = gl.curve.map(c => c.V), xmax = Math.max(...xs), Wc = gl.Wc, x = gl.xc;
+    const ymin = -Math.min(Math.max(...gl.curve.map(c => c.sink)), gl.minSink * 6);
+    return chart({ w, h: hgt, compact, x: [0, xmax], y: [ymin, Wc * 1.15], xLabel: compact ? null : 'Airspeed (m/s)', yLabel: compact ? null : 'Vertical speed (m/s)', label: 'Glide polar and speed to fly',
+      series: [{ pts: gl.curve.map(c => [c.V, -c.sink]), cls: 's-accent' }, { pts: [[0, Wc], [x.V, -x.sink], [Math.min(xmax, x.V * 1.25), -x.sink - (x.sink + Wc) / x.V * x.V * 0.25]], cls: 's-hl' }, { pts: [[0, 0], [xmax, 0]], cls: 's-muted' }],
+      legend: [{ label: 'Sink', cls: 's-accent' }, { label: `MacCready ${fx(Wc, 1)} m/s`, cls: 's-hl' }],
+      marks: compact ? [] : [{ x: gl.Vs, label: `Stall ${fx(gl.Vs, 1)}`, cls: 's-warn' }, { x: gl.Vms, label: `Min sink ${fx(gl.Vms, 1)}`, cls: 's-warn', row: 1 }, { x: gl.Vmd, label: `Best glide ${fx(gl.Vmd, 1)}`, cls: 's-warn', row: 2 }, { x: x.V, label: `Speed to fly ${fx(x.V, 1)}`, cls: 's-hl', row: 3, color: 'var(--hl)' }],
+      points: [{ x: x.V, y: -x.sink, color: 'var(--hl)' }, { x: 0, y: Wc, color: 'var(--hl)' }] });
+  }
+  function polarLens(out) {
+    const gl = out.glide;
+    const box = h('button', { class: 'lens', type: 'button', onclick: goto('mission') }, h('h4', {}, 'Glide polar', h('span', {}, gl ? `L/D ${fx(gl.LDmax, 1)}` : '')));
+    if (!gl) { box.append(h('div', { class: 'cap' }, 'not computed')); return box; }
+    box.append(polarChart(gl, 196, 104, true), h('div', { class: 'cap' }, 'Min sink ', h('b', {}, `${fx(gl.minSink, 2)} m/s`), ' · XC ', h('b', {}, `${fx(gl.xcSpeed, 0)} km/h`)), h('div', { class: 'go' }, 'Open cross-country view →'));
+    return box;
+  }
+  function glidePane(out) {
+    const gl = out.glide, ae = out.aero;
+    if (!gl) return h('div', { class: 'level-pane' }, h('div', { class: 'placeholder' }, 'The glide polar is not computed (see the coupling graph).'));
+    return h('div', { class: 'level-pane' },
+      h('h3', {}, 'Cross-country · glide polar and speed to fly'),
+      h('div', { class: 'note' }, `The parabolic polar at ${fx(out.mass?.total, 0)} kg and the flight altitude. MacCready's speed to fly is where the line from the thermal climb (${fx(gl.Wc, 1)} m/s) touches the polar; flying it between thermals gives the best average speed.`),
+      plotCard('Glide polar', polarChart(gl, 900, 340, false)),
+      h('div', { class: 'kv' },
+        kv('Best glide ratio', `${fx(gl.LDmax, 1)} @ ${fx(gl.Vmd * 3.6, 0)} km/h`), kv('Minimum sink', `${fx(gl.minSink, 2)} m/s @ ${fx(gl.Vms * 3.6, 0)} km/h`), kv('Stall (1 g)', `${fx(gl.Vs * 3.6, 0)} km/h`), kv('Wing loading', `${fx(gl.wingLoading, 1)} kg/m²`),
+        kv('Cross-country speed', `${fx(gl.xcSpeed, 1)} km/h`), kv('Speed to fly', `${fx(gl.xc.V * 3.6, 0)} km/h`), kv('Zero-lift drag CD0', fx(ae?.CD0, 4)), kv('Oswald e', fx(ae?.e, 3))),
+      h('h3', {}, 'MacCready table'),
+      h('div', { class: 'mx-wrap' }, h('table', { class: 'rq' }, h('thead', {}, h('tr', {}, ['Thermal climb', 'Speed to fly', 'Sink at that speed', 'Cross-country speed'].map(t => h('th', {}, t)))),
+        h('tbody', {}, gl.mc.map(r => h('tr', {}, h('td', { class: 'num-c' }, `${fx(r.Wc, 1)} m/s`), h('td', { class: 'num-c' }, `${fx(r.V * 3.6, 0)} km/h`), h('td', { class: 'num-c' }, `${fx(r.sink, 2)} m/s`), h('td', { class: 'num-c' }, `${fx(r.Vxc * 3.6, 1)} km/h`)))))),
+      h('div', { class: 'placeholder' }, 'The drag is a fully turbulent handbook build-up, so it is the pessimistic bound: laminar sailplanes reach far higher glide ratios. Choose viscous sections under Fidelity for the free-transition section drag of the wing.'));
   }
   function airfoilSvg(code, w, hgt, chordPx) {
     const { X, Y } = nacaPanels(code, 120);
@@ -410,6 +455,17 @@ export function renderWorkspace(root, doc) {
     const color = st => st === 'fail' ? 'var(--bad)' : st === 'marginal' ? 'var(--warn)' : null;
     const card = (label, value, unit, sub, metric) => h('div', { class: 'stat' }, h('span', { class: 'stat-l' }, label),
       h('span', { class: 'stat-v', style: { color: metric ? color(status(metric)) : null } }, value, unit ? h('small', {}, unit) : null), h('span', { class: 'stat-s' }, sub));
+    if (glider) {
+      const gl = o.glide;
+      stats.replaceChildren(
+        card('Best glide ratio', fx(gl?.LDmax, 1), '', gl ? `at ${fx(gl.Vmd * 3.6, 0)} km/h` : '—', 'glide.LDmax'),
+        card('Minimum sink', fx(gl?.minSink, 2), 'm/s', gl ? `at ${fx(gl.Vms * 3.6, 0)} km/h` : '—', 'glide.minSink'),
+        card('Cross-country speed', fx(gl?.xcSpeed, 0), 'km/h', gl ? `${fx(gl.Wc, 1)} m/s climbs · fly ${fx(gl.xc.V * 3.6, 0)} km/h` : '—', 'glide.xcSpeed'),
+        card('Static margin', st ? minus(fx(st.SM, 1)) : '—', '% MAC', st ? `NP ${fx(st.xnp, 3)} m · CG ${fx(m?.xcg, 3)} m` : '—', 'stability.SM'),
+        card('Takeoff mass', fx(m?.total, 1), 'kg', gl ? `${fx(gl.wingLoading, 1)} kg/m² wing loading` : '—', 'mass.total'),
+        card('Requirements met', rq ? `${rq.met} / ${rq.total}` : '—', '', rq ? `${rq.marginal} marginal · ${rq.failing} failing` : '—'));
+      return;
+    }
     stats.replaceChildren(
       card('Lift-to-drag, max', fx(p?.LDmax, 1), '', p ? `cruise ${fx(p.cruise.LD, 1)} at ${fx(p.cruise.V, 0)} m/s` : '—', 'performance.LDmax'),
       card('Endurance', fx(p?.endurance, 0), 'min', p ? `at ${fx(p.Vend, 1)} m/s · ${fx(p.Pend, 0)} W` : '—', 'performance.endurance'),
@@ -422,7 +478,7 @@ export function renderWorkspace(root, doc) {
     const rq = outputs().requirements;
     const label = { met: 'met', marginal: 'marginal', fail: 'failing' };
     reqs.replaceChildren(
-      h('div', { class: 'sec-row' }, h('span', { class: 'sec' }, 'Requirements'), h('span', { class: 'muted', style: { fontSize: '12px' } }, rq ? `${rq.met} met · ${rq.marginal} marginal · ${rq.failing} failing · margin < 5% is marginal` : 'not computed')),
+      h('div', { class: 'sec-row' }, h('span', { class: 'sec' }, 'Requirements'), h('span', { class: 'muted', style: { fontSize: '12px' } }, rq ? `${rq.met} met · ${rq.marginal} marginal · ${rq.failing} failing · margin < 5% is marginal · ` : 'not computed · ', h('a', { href: `#/v/${doc.id}/requirements` }, 'Edit requirements and see their history →'))),
       h('div', { class: 'mx-wrap' }, h('table', { class: 'rq' },
         h('thead', {}, h('tr', {}, ['ID', 'Requirement', 'Area', 'Target', 'Value', 'Margin', 'Status'].map(t => h('th', {}, t)))),
         h('tbody', {}, (rq ? rq.list : doc.requirements).map(r => {

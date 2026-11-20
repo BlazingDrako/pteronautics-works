@@ -4,7 +4,7 @@ import { VEHICLE_CLASSES, clone } from '../model/vehicle.js';
 import { allVehicles, saveVehicle, pickVehicleFile, uniqueId, loadVehicle } from '../model/store.js';
 import { kestrel } from '../model/seeds.js';
 import { CouplingGraph } from '../engine/graph.js';
-import { fixedWingNodes } from '../analyses/fixedWing.js';
+import { analysisNodes } from '../analyses/classes.js';
 import { sketch } from './sketches.js';
 
 let filter = 'all';
@@ -14,7 +14,7 @@ export const opensWorkspace = v => (VEHICLE_CLASSES[v.class]?.implemented) || v.
 
 function liveSummary(doc) {
   try {
-    const g = new CouplingGraph(fixedWingNodes());
+    const g = new CouplingGraph(analysisNodes(doc));
     g.runSync(doc);
     return g.outputs('requirements');
   } catch { return null; }
@@ -32,7 +32,8 @@ function card(v) {
   const live = VEHICLE_CLASSES[v.class]?.implemented;
   const sum = live ? liveSummary(v) : null;
   const tags = v.tags || (v.class === 'fixed-wing' ? fixedWingTags(v) : []);
-  const badge = v.badge || (v.class === 'fixed-wing' ? `b ${fx(v.components.find(c => c.type === 'wing')?.span, 1)} m` : VEHICLE_CLASSES[v.class]?.label);
+  const span = v.components.find(c => c.type === 'wing')?.span;
+  const badge = v.badge || (live && span ? `b ${fx(span, 1)} m` : VEHICLE_CLASSES[v.class]?.label);
   const body = [
     h('div', { class: 'stage' }, sketch(v), h('span', { class: 'tag' }, badge),
       h('span', { class: 'state' }, live ? h('span', { class: 'tag live' }, 'live analysis') : v.preview ? h('span', { class: 'tag accent' }, 'workspace preview') : h('span', { class: 'tag' }, 'concept'))),
@@ -52,18 +53,18 @@ function fixedWingTags(v) {
 
 // The core solvers against the vehicle classes: ● drives the design, ○ coupled in, – not used. "live" = wired in this build.
 const MATRIX = [
-  ['Airfoil & sections · viscous panel', 'airfoil', [1, 1, 2, 0, 0, 1]],
-  ['Wings · vortex lattice, lifting line', 'wing', [1, 2, 1, 2, 0, 1], [0]],
+  ['Airfoil & sections · viscous panel', 'airfoil', [1, 1, 2, 0, 0, 1], [0, 5]],
+  ['Wings · vortex lattice, lifting line', 'wing', [1, 2, 1, 2, 0, 1], [0, 5]],
   ['Compressible · shocks, nozzles, Euler CFD', 'gasdyn', [0, 0, 1, 1, 0, 0]],
   ['Propellers & rotors · BEM, momentum', 'rotors', [2, 1, 0, 0, 0, 0]],
   ['Jet cycles, inlets & turbomachinery', 'cycles', [0, 0, 1, 0, 0, 0]],
   ['Rocket engines · equilibrium chemistry, feed', 'rocket', [0, 0, 0, 1, 2, 0]],
   ['Heat transfer · conduction, radiation', 'heat', [2, 2, 2, 1, 1, 0]],
   ['Structures · frames, FEA, buckling', 'structures', [2, 2, 2, 1, 2, 1]],
-  ['Flight dynamics · performance, stability', 'flight', [1, 1, 1, 2, 0, 1], [0]],
+  ['Flight dynamics · performance, stability', 'flight', [1, 1, 1, 2, 0, 1], [0, 5]],
   ['GNC · autopilot, navigation, Kalman', 'gnc', [2, 1, 2, 2, 2, 0]],
   ['Orbital mechanics · transfers, J2', 'orbits', [0, 0, 0, 1, 1, 0]],
-  ['Standard atmosphere · ISA 1976', 'atmosphere', [2, 2, 2, 2, 0, 2], [0]],
+  ['Standard atmosphere · ISA 1976', 'atmosphere', [2, 2, 2, 2, 0, 2], [0, 5]],
 ];
 const CLASS_ORDER = ['fixed-wing', 'rotorcraft', 'high-speed', 'launch-vehicle', 'spacecraft', 'sailplane'];
 
@@ -82,18 +83,19 @@ function matrix() {
 
 function sidebar() {
   // trade studies open on the most recently edited vehicle this build analyses
-  const live = allVehicles().filter(v => VEHICLE_CLASSES[v.class]?.implemented).sort((a, b) => String(b.updated).localeCompare(String(a.updated)))[0];
+  const recent = allVehicles().filter(v => VEHICLE_CLASSES[v.class]?.implemented).sort((a, b) => String(b.updated).localeCompare(String(a.updated)));
+  const live = recent[0], powered = recent.find(v => v.class === 'fixed-wing');
   const planned = (ic, label) => h('div', { class: 'nav-item planned', title: label + ' (coming in a later slice)' }, icon(ic), h('span', {}, label), h('span', { class: 'soon' }, 'soon'));
   return h('nav', { class: 'sidebar', 'aria-label': 'Works navigation' },
     brand(),
     h('a', { class: 'nav-item active', href: '#/' }, icon('hangar'), h('span', {}, 'Hangar')),
-    live ? h('a', { class: 'nav-item', href: `#/v/${live.id}/mission`, title: `The mission profile of ${live.name}` }, icon('mission'), h('span', {}, 'Missions')) : planned('mission', 'Missions'),
-    planned('list', 'Requirements'),
+    powered ? h('a', { class: 'nav-item', href: `#/v/${powered.id}/mission`, title: `The mission profile of ${powered.name}` }, icon('mission'), h('span', {}, 'Missions')) : planned('mission', 'Missions'),
+    live ? h('a', { class: 'nav-item', href: `#/v/${live.id}/requirements`, title: `The requirements of ${live.name}` }, icon('list'), h('span', {}, 'Requirements')) : planned('list', 'Requirements'),
     live ? h('a', { class: 'nav-item', href: `#/v/${live.id}/trade`, title: `Trade studies on ${live.name}` }, icon('bars'), h('span', {}, 'Trade studies')) : planned('bars', 'Trade studies'),
     h('div', { class: 'nav-group' }, 'Libraries'),
     planned('airfoil', 'Airfoils'), planned('motor', 'Engines & motors'), planned('grid', 'Materials'), planned('cell', 'Propellants & cells'),
     h('div', { class: 'nav-group' }, 'Output'),
-    planned('doc', 'Reports'),
+    live ? h('a', { class: 'nav-item', href: `#/v/${live.id}/report`, title: `The design report of ${live.name}` }, icon('doc'), h('span', {}, 'Reports')) : planned('doc', 'Reports'),
     h('div', { class: 'sidebar-foot' }, themeButton(), h('div', { class: 'sidebar-credit' }, 'Made by Andrew Aguiar · ', h('a', { href: 'https://blazingdrako.github.io/pteronautics/' }, 'Pteronautics'))));
 }
 

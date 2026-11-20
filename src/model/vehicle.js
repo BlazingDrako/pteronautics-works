@@ -59,7 +59,8 @@ export const COMPONENT_TYPES = {
   battery: {
     label: 'Battery',
     params: [n('energy', 'Energy', 'Wh', 888, 1, 1e6, 1), n('usable', 'Usable fraction', '', 0.85, 0.5, 1, 0.01), t('chemistry', 'Chemistry', 'Li-ion 6S'), ...massX(4.9, 0.5),
-      n('specificEnergy', 'Specific energy', 'Wh/kg', 180, 10, 1000, 1), c('sizing', 'Mass with energy', 'linked', ['linked', 'fixed'])],
+      n('specificEnergy', 'Specific energy', 'Wh/kg', 180, 10, 1000, 1), c('sizing', 'Mass with energy', 'linked', ['linked', 'fixed']),
+      n('voltage', 'Nominal voltage', 'V', 22.2, 1, 1000, 0.1), n('resistance', 'Internal resistance', 'Ω', 0.012, 0, 2, 0.001)],
   },
   payload: { label: 'Payload', params: [t('description', 'Description', ''), ...massX(4.5, 0.4)] },
   avionics: { label: 'Avionics', params: [...massX(1.4, 0.35)] },
@@ -86,10 +87,18 @@ export const VEHICLE_CLASSES = {
   'high-speed': { label: 'High-speed', implemented: false, types: ['fuselage', 'wing', 'htail', 'vtail', 'inlet', 'turbofan', 'payload', 'avionics', 'systems'] },
   'launch-vehicle': { label: 'Launch vehicles', implemented: false, types: ['stage', 'rocketEngine', 'fairing', 'payload', 'avionics', 'systems'] },
   spacecraft: { label: 'Spacecraft', implemented: false, types: ['bus', 'solarArray', 'thruster', 'battery', 'payload', 'avionics'] },
-  sailplane: { label: 'Sailplanes', implemented: false, types: ['fuselage', 'wing', 'htail', 'vtail', 'payload', 'avionics', 'systems'] },
+  sailplane: { label: 'Sailplanes', implemented: true, types: ['fuselage', 'wing', 'htail', 'vtail', 'payload', 'avionics', 'systems'] },
 };
 
 export const REQUIREMENT_OPS = ['>=', '<='];
+
+// Mission settings a fixed-wing document carries besides its segments: field elevation (m, ISA) and the hotel load
+// (W drawn all flight by the avionics and payload)
+export const MISSION_DEFAULTS = { fieldElevation: 0, hotelPower: 0 };
+export const MISSION_SETTINGS = [
+  { key: 'fieldElevation', label: 'Field elevation', unit: 'm', min: 0, max: 5000, step: 10 },
+  { key: 'hotelPower', label: 'Hotel load', unit: 'W', min: 0, max: 1e5, step: 1 },
+];
 
 // Linked sizing: parts whose mass scales with what they deliver, a = k·b (energy = specific energy × mass).
 // With sizing 'linked' the pack or motor grows with its rating; with 'fixed' its mass stays and k follows.
@@ -124,7 +133,10 @@ export function upgrade(doc) {
     if (L && c[L.k] === undefined && c[L.b] > 0 && typeof c[L.a] === 'number') c[L.k] = c[L.a] / c[L.b];
     for (const p of T.params) if (c[p.key] === undefined) c[p.key] = p.def;
   }
-  if (doc.class === 'fixed-wing' && doc.mission && !Array.isArray(doc.mission.segments)) doc.mission.segments = defaultSegments(doc.mission);
+  if (doc.class === 'fixed-wing' && doc.mission) {
+    if (!Array.isArray(doc.mission.segments)) doc.mission.segments = defaultSegments(doc.mission);
+    for (const [k, v] of Object.entries(MISSION_DEFAULTS)) if (doc.mission[k] === undefined) doc.mission[k] = v;
+  }
   return doc;
 }
 
@@ -164,6 +176,7 @@ export function validate(doc) {
     }
   }
   if (doc.mission && doc.mission.segments !== undefined) err.push(...validateSegments(doc.mission.segments));
+  for (const s of MISSION_SETTINGS) { const v = doc.mission?.[s.key]; if (v !== undefined && (typeof v !== 'number' || !(v >= s.min && v <= s.max))) err.push(`mission.${s.key} must be a number in ${s.min}…${s.max}`); }
   if (doc.requirements !== undefined) {
     if (!Array.isArray(doc.requirements)) err.push('requirements must be a list');
     else for (const r of doc.requirements) {
@@ -179,15 +192,21 @@ export const component = (doc, id) => doc.components.find(x => x.id === id);
 export const componentsOf = (doc, type) => doc.components.filter(x => x.type === type);
 export const firstOf = (doc, type) => doc.components.find(x => x.type === type);
 
-// Read and write a value by path: "mission.altitude" or "<componentId>.<param>"
+// Read and write a value by path: "mission.altitude", "<componentId>.<param>", or a segment's value
+// "mission.segments.<segmentId>.<param>"
+const SEG = /^segments\.([^.]+)\.([^.]+)$/;
 export function getPath(doc, path) {
   const [head, key] = splitPath(path);
+  const sm = head === 'mission' && SEG.exec(key);
+  if (sm) return doc.mission?.segments?.find(s => s.id === sm[1])?.[sm[2]];
   if (head === 'mission') return doc.mission?.[key];
   const comp = component(doc, head);
   return comp ? comp[key] : undefined;
 }
 export function setPath(doc, path, value) {
   const [head, key] = splitPath(path);
+  const sm = head === 'mission' && SEG.exec(key);
+  if (sm) { const sg = doc.mission?.segments?.find(s => s.id === sm[1]); if (!sg) throw new Error(`No segment "${sm[1]}"`); sg[sm[2]] = value; return doc; }
   if (head === 'mission') { doc.mission = doc.mission || {}; doc.mission[key] = value; return doc; }
   const comp = component(doc, head);
   if (!comp) throw new Error(`No component "${head}"`);
@@ -199,8 +218,10 @@ export function setPath(doc, path, value) {
 //   (which also changes the tail arm).
 export const TAIL_TYPES = ['htail', 'vtail'];
 export function applyEdit(doc, path, value) {
-  const changed = [path];
   const [head, key] = splitPath(path);
+  // a segment's value changes the mission profile as a whole
+  if (head === 'mission' && SEG.test(key)) { setPath(doc, path, value); return [path, 'mission.segments']; }
+  const changed = [path];
   const comp = head === 'mission' ? null : component(doc, head);
   if (comp && comp.type === 'fuselage' && key === 'length' && typeof comp.length === 'number') {
     const dL = value - comp.length;
