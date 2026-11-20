@@ -33,7 +33,7 @@ function card(v) {
   const sum = live ? liveSummary(v) : null;
   const tags = live ? liveTags(v) : v.tags || [];
   const span = v.components.find(c => c.type === 'wing')?.span;
-  const badge = v.badge || (live && span ? `b ${fx(span, 1)} m` : VEHICLE_CLASSES[v.class]?.label);
+  const badge = v.badge || (live && span ? `b ${fx(span, 1)} m` : v.class === 'launch-vehicle' ? `${((v.components.reduce((a, c) => a + (c.type === 'stage' ? c.dry + c.propellant : c.type === 'rocketEngine' ? c.mass * c.count : c.type === 'fairing' ? c.mass : 0), 0) + (v.mission?.payload ?? 0)) / 1000).toFixed(1)} t at liftoff` : VEHICLE_CLASSES[v.class]?.label);
   const body = [
     h('div', { class: 'stage' }, sketch(v), h('span', { class: 'tag' }, badge),
       h('span', { class: 'state' }, live ? h('span', { class: 'tag live' }, 'live analysis') : v.preview ? h('span', { class: 'tag accent' }, 'workspace preview') : h('span', { class: 'tag' }, 'concept'))),
@@ -53,6 +53,10 @@ function liveTags(v) {
     if (!w) return [];
     const S = w.span * w.rootChord * (1 + w.taper) / 2;
     return [`NACA ${w.rootAirfoil}`, `AR ${fx(w.span * w.span / S, 1)}`, `${fx(v.mission?.climbRate ?? 1.5, 1)} m/s climbs`];
+  }
+  if (v.class === 'launch-vehicle') {
+    const st = v.components.filter(c => c.type === 'stage'), en = v.components.filter(c => c.type === 'rocketEngine');
+    return [`${st.length} stages`, en.map(e => e.count).join(' + ') + ' engines', `${fx(v.mission?.payload ?? 0, 0)} kg → ${fx(v.mission?.orbitAltitude ?? 0, 0)} km`];
   }
   if (v.class === 'rotorcraft') {
     const r = v.components.find(c => c.type === 'rotor'), b = v.components.find(c => c.type === 'battery'), p = v.components.find(c => c.type === 'propulsor');

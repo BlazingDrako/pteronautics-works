@@ -26,6 +26,15 @@ export const TRADE_METRICS = [
   { metric: 'performance.RoC', label: 'Best rate of climb', unit: 'm/s', d: 2, better: 1 },
   { metric: 'performance.Vmax', label: 'Max level speed', unit: 'm/s', d: 1, better: 1 },
   { metric: 'performance.LDmax', label: 'Max lift-to-drag', unit: '', d: 1, better: 1 },
+  { metric: 'orbit.payloadCapacity', label: 'Payload capacity', unit: 'kg', d: 0, better: 1 },
+  { metric: 'orbit.dvMargin', label: 'Δv margin', unit: 'm/s', d: 0, better: 1 },
+  { metric: 'staging.dv', label: 'Ideal Δv', unit: 'm/s', d: 0, better: 1 },
+  { metric: 'ascent.gravityLoss', label: 'Gravity loss', unit: 'm/s', d: 0, better: -1 },
+  { metric: 'ascent.dragLoss', label: 'Drag loss', unit: 'm/s', d: 0, better: -1 },
+  { metric: 'ascent.qmaxKPa', label: 'Max-Q', unit: 'kPa', d: 1, better: -1 },
+  { metric: 'ascent.gmax', label: 'Peak acceleration', unit: 'g', d: 2, better: -1 },
+  { metric: 'stack.TW', label: 'Liftoff thrust-to-weight', unit: '', d: 2, better: 0 },
+  { metric: 'stack.liftoff', label: 'Liftoff mass', unit: 'kg', d: 0, better: -1 },
   { metric: 'hover.kW', label: 'Hover power', unit: 'kW', d: 0, better: -1 },
   { metric: 'hover.diskLoadingKg', label: 'Disk loading', unit: 'kg/m²', d: 1, better: -1 },
   { metric: 'glide.LDmax', label: 'Best glide ratio', unit: '', d: 1, better: 1 },
@@ -174,7 +183,7 @@ export const SENSITIVITY_DEFAULTS = ['wing.span', 'wing.rootChord', 'wing.taper'
 
 // An evaluator: a working copy of the vehicle and one graph. at(edits) sets those paths (others at the design),
 // reruns what they reach, and returns the flattened metrics and the requirements.
-function makeEvaluator({ doc, nodes, fidelity }) {
+export function makeEvaluator({ doc, nodes, fidelity }) {
   const work = clone(doc), graph = new CouplingGraph(nodes);
   for (const [id, level] of Object.entries(fidelity)) if (level && graph.nodes.get(id)?.fidelity) graph.setFidelity(id, level);
   const asyncGraph = [...graph.nodes.values()].some(n => n.fidelity && n.fidelity.value === 'viscous');

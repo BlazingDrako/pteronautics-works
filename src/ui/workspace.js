@@ -6,8 +6,9 @@ import { saveVehicle, downloadVehicle, pickVehicleFile, resetVehicle, isModified
 import { seeds } from '../model/seeds.js';
 import { noteEdit, recordStatuses, describeEdit } from '../model/history.js';
 import { CouplingGraph } from '../engine/graph.js';
-import { AERO_LEVELS, SECTION_LEVELS } from '../analyses/fixedWing.js';
+import { AERO_LEVELS, SECTION_LEVELS, STRUCTURE_LEVELS } from '../analyses/fixedWing.js';
 import { analysisNodes } from '../analyses/classes.js';
+import { HOVER_LEVELS } from '../analyses/rotors.js';
 import { vehicleView } from './planform.js';
 import { mountView3d, defaultCamera } from './view3d.js';
 import { createAirfoilLab } from './airfoilLab.js';
@@ -69,6 +70,7 @@ export function renderWorkspace(root, doc) {
       revPill,
       glider ? null : h('a', { class: 'btn small', href: `#/v/${doc.id}/mission`, title: 'Plan the mission profile: climb, transits, survey, reserve' }, icon('mission'), 'Mission'),
       h('a', { class: 'btn small', href: `#/v/${doc.id}/trade`, title: 'Sweep design values through the coupled analyses' }, icon('bars'), 'Trade study'),
+      h('a', { class: 'btn small', href: `#/v/${doc.id}/optimize`, title: 'Search the coupled graph for the best design that meets the requirements' }, icon('bars'), 'Optimise'),
       h('a', { class: 'btn small', href: `#/v/${doc.id}/compare`, title: 'Save snapshots and compare designs side by side' }, icon('grid'), 'Compare'),
       h('a', { class: 'btn small', href: `#/v/${doc.id}/report`, title: 'A printable report of the current design' }, icon('doc'), 'Report'),
       h('button', { class: 'btn small', type: 'button', title: 'Download this vehicle as a .json file', onclick: () => downloadVehicle(doc) }, icon('download'), 'Save .json'),
@@ -402,11 +404,17 @@ export function renderWorkspace(root, doc) {
       missionCard(out));
   }
   function hoverCard(hv) {
-    return h('div', { class: 'plot-card' }, h('h4', {}, 'Hover on the lift rotors', h('span', { class: 'sub' }, 'momentum theory · figure of merit')),
+    const bem = hv.method === 'bem';
+    const blade = bem ? chart({ w: 900, h: 200, x: [0, 1], y: [0, Math.max(...hv.span.map(e => e.dTdr)) * 1.1], xLabel: 'Radius r/R', yLabel: 'Thrust per metre (N/m)', label: 'Thrust along the blade in hover',
+      series: [{ pts: hv.span.map(e => [e.x, e.dTdr]), cls: 's-accent' }] }) : null;
+    return h('div', { class: 'plot-card' }, h('h4', {}, 'Hover on the lift rotors', h('span', { class: 'sub' }, bem ? 'blade element momentum · Prandtl tip loss' : 'momentum theory · figure of merit')),
       h('div', { class: 'kv' },
         kv('Battery power to hover', `${fx(hv.kW, 0)} kW`), kv('Shaft power', `${fx(hv.P / 1000, 0)} kW (${fx(hv.perRotor / 1000, 0)} kW per rotor)`),
         kv('Disk loading', `${fx(hv.diskLoadingKg, 1)} kg/m²`), kv('Induced velocity', `${fx(hv.vh, 1)} m/s`),
-        kv('Power loading', `${fx(hv.powerLoading * 1000 / 9.80665, 1)} kg/kW`), kv('Tip Mach', fx(hv.tipMach, 2))),
+        kv('Power loading', `${fx(hv.powerLoading * 1000 / 9.80665, 1)} kg/kW`), kv('Tip Mach', fx(hv.tipMach, 2)),
+        kv('Figure of merit', `${fx(hv.FM, 3)}${bem ? '' : ' (set)'}`), kv('Blade loading C_T/σ', fx(hv.CTsigma, 3)),
+        bem ? kv('Collective (trimmed)', `${fx(hv.collective, 1)}°`) : null, bem ? kv('Blade stalled', `${fx(hv.stalled * 100, 0)}% of the span`) : null),
+      blade,
       h('p', { class: 'note', style: { marginTop: '8px' } }, `At the field, ${hv.n} rotors of ${fx(hv.A / hv.n, 2)} m² each. Hover and transition are flown as hover segments in the mission planner.`));
   }
   function missionCard(out) {
@@ -438,7 +446,24 @@ export function renderWorkspace(root, doc) {
         kv('Area S', `${fx(g.S, 3)} m²`), kv('Span b', `${fx(g.span, 2)} m`), kv('Aspect ratio', fx(g.AR, 2)), kv('MAC', `${fx(g.mac, 3)} m`),
         kv('CLα', `${fx(ae.CLa, 3)} /rad`), kv('αL0', `${minus(fx(ae.alphaL0, 2))}°`), kv('Span efficiency (inviscid)', fx(ae.eInv, 3)), kv('Oswald e', fx(ae.e, 3)),
         kv('Aerodynamic centre', `${fx(ae.xac * 100, 1)}% MAC`), kv('Cm,ac', minus(fx(ae.Cm0, 3))), kv('CL,max', `${fx(ae.CLmax, 3)} (${ae.clSource})`), kv('Reynolds (MAC)', `${fx(ae.Re / 1e6, 2)} M`)),
-      h('h3', {}, `Zero-lift drag CD0 ${fx(ae.CD0, 4)} · component build-up`), h('div', { class: 'kv' }, drag));
+      h('h3', {}, `Zero-lift drag CD0 ${fx(ae.CD0, 4)} · component build-up`), h('div', { class: 'kv' }, drag),
+      structurePane(out));
+  }
+  // the wing spar at beam level: bending moment and cap area along the span
+  function structurePane(out) {
+    const st = out.mass?.structure, w = firstOf(doc, 'wing');
+    if (!st || st.level !== 'beam') return h('div', { class: 'placeholder' }, `Wing mass is the structural areal mass × area (${fx(w?.arealMass, 2)} kg/m²). Choose "beam" under Fidelity › Structure to size the spar for bending and shear instead.`);
+    const b = st.beam, pts = b.stations;
+    const mom = chart({ w: 900, h: 230, x: [0, 1], y: [0, b.rootMoment / 1000 * 1.08], xLabel: 'Span station η = 2y/b', yLabel: 'Bending moment (kN·m)', label: 'Bending moment along the span at the ultimate load',
+      series: [{ pts: pts.map(p => [p.eta, p.M / 1000]), cls: 's-accent' }, { pts: pts.map(p => [p.eta, p.A * 1e6 / (b.rootCap * 1e6) * b.rootMoment / 1000]), cls: 's-hl' }],
+      legend: [{ label: 'Bending moment', cls: 's-accent' }, { label: 'Spar cap area (scaled to the root)', cls: 's-hl' }] });
+    return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
+      h('h3', {}, `Wing structure · beam · ${fx(st.mass, st.mass > 50 ? 1 : 2)} kg`),
+      h('div', { class: 'note' }, `Elliptic lift at ${fx(b.nUlt, 2)} g ultimate (1.5 × the limit load factor ${fx(w.loadFactor, 1)} g), on an I-beam spar 90% of the section deep, in ${b.material}. The wing's weight is iterated into the load; no inertia relief.`),
+      plotCard('Bending moment and spar caps along the span', mom),
+      h('div', { class: 'kv' },
+        kv('Root bending moment', `${fx(b.rootMoment / 1000, 2)} kN·m`), kv('Root shear', `${fx(b.rootShear / 1000, 2)} kN`), kv('Spar depth at the root', `${fx(b.rootDepth * 1000, 0)} mm`), kv('Cap area at the root', `${fx(b.rootCap * 1e6, 0)} mm²`),
+        kv('Spar caps', `${fx(b.caps, 2)} kg`), kv('Shear web', `${fx(b.web, 2)} kg`), kv('Skin, ribs & controls', `${fx(b.skin, 2)} kg`), kv('Equivalent areal mass', `${fx(st.mass / out.geometry.S, 2)} kg/m²`)));
   }
   const kv = (k, v) => h('div', {}, h('span', {}, k), h('b', {}, v));
   const plotCard = (title, el) => h('div', { class: 'plot-card' }, h('h4', {}, title), el);
@@ -457,9 +482,11 @@ export function renderWorkspace(root, doc) {
       h('span', {}, 'Sections'), h('span', { class: 'opts' }, SECTION_LEVELS.map(l => opt(l.label, graph.nodes.get('sections').fidelity.value === l.id, () => { graph.setFidelity('sections', l.id); paintFidelity(); run(); }, false, l.note))),
       h('span', {}, 'Stability'), h('span', { class: 'opts' }, opt('linear (Nelson)', true)),
       h('span', {}, 'Performance'), h('span', { class: 'opts' }, opt('point mass', true)),
-      h('span', {}, 'Structure'), h('span', { class: 'opts' }, opt('areal mass', true), opt('beam', false, null, true, 'later slice')));
+      ...(graph.nodes.get('hover') ? [h('span', {}, 'Hover'), h('span', { class: 'opts' }, HOVER_LEVELS.map(l => opt(l.label, graph.nodes.get('hover').fidelity.value === l.id, () => { graph.setFidelity('hover', l.id); paintFidelity(); run(); }, false, l.note)))] : []),
+      h('span', {}, 'Structure'), h('span', { class: 'opts' }, STRUCTURE_LEVELS.map(l => opt(l.label, graph.nodes.get('mass').fidelity.value === l.id, () => { graph.setFidelity('mass', l.id); paintFidelity(); run(); }, false, l.note))));
     const sl = SECTION_LEVELS.find(l => l.id === graph.nodes.get('sections').fidelity.value);
-    fidNote.textContent = AERO_LEVELS.find(l => l.id === nd.fidelity.value).note + '. Sections: ' + sl.note + '.';
+    const stl = STRUCTURE_LEVELS.find(l => l.id === graph.nodes.get('mass').fidelity.value);
+    fidNote.textContent = AERO_LEVELS.find(l => l.id === nd.fidelity.value).note + '. Sections: ' + sl.note + '. Structure: ' + stl.note + '.';
   }
 
   // ---------- bottom: stats and requirements ----------

@@ -62,3 +62,21 @@ export function evtolTests(log) {
   ok('Halcyon\'s top speed is set by its power, above the old 40 m/s cap', o.performance.Vmax > 60 && o.performance.Vmax < 1.25 * hal.mission.cruiseSpeed / Math.sqrt(atmosphere(450).sigma ?? atmosphere(450).rho / 1.225) - 1, o.performance.Vmax.toFixed(1));
   ok('trade: hover metrics for an eVTOL, not for Kestrel', metricsFor(hal).some(m => m.metric === 'hover.kW') && !metricsFor(kestrel()).some(m => m.metric === 'hover.kW'));
 }
+
+export function bemTests(log) {
+  const ok = (name, cond, detail = '') => log('eVTOL BEM: ' + name, !!cond, detail);
+  return import('../../src/analyses/rotors.js').then(({ hoverBEM, hoverPower }) => {
+    const hal = seeds().find(v => v.id === 'halcyon'), rotor = firstOf(hal, 'rotor'), W = 18900, rho = 1.225;
+    const b = hoverBEM({ rotor, W, rho });
+    ok('the trimmed rotors lift the weight', Math.abs(b.thrustPerRotor * b.n - W) < 1e-9 && b.collective > 0 && b.collective < 35, `collective ${b.collective.toFixed(1)}°`);
+    ok('the figure of merit is a real rotor\'s, 0.6–0.85, with no stalled blade', b.FM > 0.6 && b.FM < 0.85 && b.stalled === 0, b.FM.toFixed(3));
+    const m = hoverPower({ rotor: { ...rotor, figureOfMerit: b.FM }, W, rho });
+    ok('momentum theory at the blade-element figure of merit gives the same power', Math.abs(m.P / b.P - 1) < 1e-9);
+    const lo = hoverBEM({ rotor: { ...rotor, solidity: 0.11 }, W, rho });
+    ok('less solidity: higher blade loading and a higher collective', lo.CTsigma > b.CTsigma && lo.collective > b.collective);
+    ok('a rotor that cannot lift its share is an error', (() => { try { hoverBEM({ rotor: { ...rotor, tipSpeed: 60 }, W, rho }); return false; } catch (e) { return /cannot lift/.test(e.message); } })());
+    const g1 = new CouplingGraph(analysisNodes(hal)); g1.setFidelity('hover', 'bem'); g1.runSync(hal);
+    const g0 = new CouplingGraph(analysisNodes(hal)); g0.runSync(hal);
+    ok('the mission\'s hover segments fly at the blade-element figure of merit', g1.outputs('mission').segments[0].P < g0.outputs('mission').segments[0].P && g1.outputs('hover').FM > g0.outputs('hover').FM);
+  });
+}
