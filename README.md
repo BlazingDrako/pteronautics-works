@@ -16,6 +16,8 @@ It runs on the same validated solver core as **Pteronautics Atlas**, the free ed
   - a breadcrumb that zooms Mission › Vehicle › Wing › Section › Boundary layer;
   - the coupling graph (atmosphere, geometry → sections, mass & balance → aero → stability, performance → requirements) with each node's state and run time, an aero fidelity selector (lifting line, vortex lattice, vortex lattice + nonlinear stall strips) and a sections selector: thin airfoil (handbook cℓ,max, fully turbulent wing skin friction) or viscous (an mfoil polar per airfoil at the mean chord's Reynolds number, run in a worker, feeding cℓ,max and the wing's profile drag into aero, and so the stall speed, L/D, endurance and requirements);
   - stat cards and a live requirements list (target, value, margin, status; targets are editable).
+- **Mission planner** (`#/v/<id>/mission`, the **Mission** button in the workspace, or **Missions** in the hangar sidebar): the flight as a list of segments — climb (full power at the best-climb speed, by altitude steps), cruise (a distance at an airspeed, with a headwind or tailwind), loiter (a time at an airspeed), descent (a glide at best L/D, motor off) and reserve (held at landing, sized at the best-endurance speed). It shows altitude and battery energy through the flight, each segment's time, distance, power and energy, the energy split by segment, and what is left after the reserve. A segment that cannot be flown (below 1.1 × stall, beyond the motor, above the ceiling) is flagged. The **Mission** node joins the coupling graph, so an airframe edit in the workspace reaches the mission, and Kestrel's R-11 requires 5% of usable energy left after the reserve.
+- **Linked sizing**: the battery's mass follows its energy at its specific energy (Wh/kg) and the motor's mass follows its power (W/kg). Set **Mass with energy / power** to *fixed* to hold the mass instead. Setting the mass of a linked part changes its rating; setting its specific energy or power changes its mass (linked) or its rating (fixed). Edits, trade studies and missions all apply the same rule.
 - **Trade studies** (`#/v/<id>/trade`, the **Trade study** button in the workspace, or **Trade studies** in the hangar sidebar), each sample a full coupled run of the same graph:
   - **Sweep**: one design value over a range. One chart per metric, with each requirement's target and failing side, the worst requirement margin along the sweep, and the part of the range where every requirement holds (and which requirements end it);
   - **Map**: two design values over a grid. One metric as colour, hatching where a requirement fails, each requirement's boundary drawn as a contour, and the best point that meets every requirement;
@@ -23,7 +25,7 @@ It runs on the same validated solver core as **Pteronautics Atlas**, the free ed
   - click a sample to compare it with the design, and **Apply** it to the vehicle. The settings are remembered per vehicle in this browser.
 - The vehicle is kept in `localStorage` as you edit, and can be saved and loaded as a `.json` file.
 
-**Stubbed or illustrative in this slice:** trade studies move one parameter at a time, so parts do not resize with it (more battery energy keeps the battery's mass unless you sweep that too); the other five vehicles are concept documents (no analyses yet); the Vireo-2 launcher workspace is a layout preview with illustrative numbers; viscous sections use free transition on a clean surface (Ncrit 9), so they are the optimistic bound and fully turbulent Raymer the conservative one; the Missions, Requirements, Libraries and Reports sidebar entries are marked "soon".
+**Stubbed or illustrative in this slice:** trade studies move one parameter at a time, with the battery and motor resized by linked sizing but nothing else (a heavier aircraft keeps its wing); the mission starts on the ground at 0 m and has no battery voltage sag or hotel load; the other five vehicles are concept documents (no analyses yet); the Vireo-2 launcher workspace is a layout preview with illustrative numbers; viscous sections use free transition on a clean surface (Ncrit 9), so they are the optimistic bound and fully turbulent Raymer the conservative one; the Requirements, Libraries and Reports sidebar entries are marked "soon".
 
 ## Run it
 
@@ -46,7 +48,7 @@ The repository is served as it is by GitHub Pages from `main` (Settings → Page
 
 Open http://localhost:8790/tests/ with the server running. The page runs:
 
-- **Works tests** (`tests/works/`): the vehicle model (schema, validation, paths, JSON round trip, storage), the coupling engine (ordering, staleness, failures, fidelity, async runs that restart on an edit, asynchronous nodes), the fixed-wing graph end to end on Kestrel (values against independent estimates, couplings and trends), the viscous sections and 3D mesh (NACA 0012 polar against XFOIL and handbook values, the viscous coupling into aero and performance, mesh extent and dihedral), and trade studies (samples against fresh runs, linked edits, the vehicle left untouched, sensitivities, feasible ranges, contours, cancelling).
+- **Works tests** (`tests/works/`): the vehicle model (schema, validation, paths, JSON round trip, storage), the coupling engine (ordering, staleness, failures, fidelity, async runs that restart on an edit, asynchronous nodes), the fixed-wing graph end to end on Kestrel (values against independent estimates, couplings and trends), the viscous sections and 3D mesh (NACA 0012 polar against XFOIL and handbook values, the viscous coupling into aero and performance, mesh extent and dihedral), linked sizing and older documents upgraded to it, the mission profile (cruise power against the Performance node, climb time against the core's time to climb, glide distance against best L/D, the reserve at best-endurance power, unflyable segments), and trade studies (samples against fresh runs, linked edits, the vehicle left untouched, sensitivities, feasible ranges, contours, cancelling).
 - **Core tests** (`tests/core/`): the Atlas solver tests that need nothing outside the solvers, copied with the core.
 
 `?only=works` or `?only=core` runs one half. Results are also left in `window.__results`.
@@ -56,14 +58,14 @@ Open http://localhost:8790/tests/ with the server running. The page runs:
 ```
 index.html, css/works.css      app page and styles (design tokens shared with Atlas)
 app/index.html                 redirect from the old /app/ address
-src/app.js                     routing: #/ hangar, #/v/<id> workspace, #/v/<id>/trade trade studies
-src/model/                     vehicle document (vehicle.js), seeds, storage and .json files
+src/app.js                     routing: #/ hangar, #/v/<id> workspace, #/v/<id>/mission mission, #/v/<id>/trade trade studies
+src/model/                     vehicle document (vehicle.js, with linked sizing and upgrades), mission segments (segments.js), seeds, storage and .json files
 src/engine/graph.js            the coupling engine
 src/adapters/aircraft.js       wrappers around the core solvers (wing, stability, performance, atmosphere)
 src/adapters/airfoil.js        mfoil operating points and polar sweeps (pure; used by the worker and the tests)
 src/workers/                   the airfoil Web Worker and its client (cancellable requests, polar cache)
-src/analyses/                  the fixed-wing analysis nodes, requirement evaluation and the trade-study runner (trade.js)
-src/ui/                        hangar, workspace, trade studies, launcher preview, planform, 3D view, airfoil lab, charts, coupling graph
+src/analyses/                  the fixed-wing analysis nodes, the mission profile (mission.js), requirement evaluation and the trade-study runner (trade.js)
+src/ui/                        hangar, workspace, mission planner, trade studies, launcher preview, planform, 3D view, airfoil lab, charts, coupling graph
 core/                          solver snapshot from Atlas (do not edit; see below)
 tests/                         test page, Works tests, copied core tests
 scripts/sync-core.sh           re-copies the core from an Atlas checkout
@@ -71,7 +73,7 @@ scripts/sync-core.sh           re-copies the core from an Atlas checkout
 
 ### The vehicle document
 
-One JSON document per vehicle, whatever its class: `{ schema, version, id, name, class, mission, components: [{ id, type, ... }], requirements: [...] }`. Component types (wing, fuselage, rotor, stage, rocket engine, bus, …) and the types each class may hold are listed in `src/model/vehicle.js`. Only fixed-wing has an analysis graph in this build.
+One JSON document per vehicle, whatever its class: `{ schema, version, id, name, class, mission, components: [{ id, type, ... }], requirements: [...] }`. Component types (wing, fuselage, rotor, stage, rocket engine, bus, …) and the types each class may hold are listed in `src/model/vehicle.js`. A fixed-wing `mission` also holds `segments`, the mission profile (`src/model/segments.js`). Documents saved before linked sizing and missions are upgraded when they load: the new parameters come from their own numbers, so their results do not change. Only fixed-wing has an analysis graph in this build.
 
 ### The coupling engine
 

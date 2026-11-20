@@ -66,13 +66,17 @@ export async function tradeTests(log) {
   rel('a fuselage-length sample carries the tails with it, as an edit does (static margin)', fl.samples[3].outputs['stability.SM'], direct(f2).stability.SM, 1e-9);
   ok('…and the vehicle is still untouched', toJSON(doc) === before);
 
-  // sensitivity: endurance is proportional to usable energy while the battery's mass is held
-  const sn = await runSensitivity({ doc, nodes: nodes(), paths: ['battery.energy', 'wing.twist', 'payload.mass'], metric: 'performance.endurance', frac: 0.1 });
+  // sensitivity: with the battery's mass fixed, endurance is proportional to its usable energy
+  const fixedDoc = clone(doc); fixedDoc.components.find(x => x.type === 'battery').sizing = 'fixed';
+  const sn = await runSensitivity({ doc: fixedDoc, nodes: nodes(), paths: ['battery.energy', 'wing.twist', 'payload.mass'], metric: 'performance.endurance', frac: 0.1 });
   const be = sn.rows.find(x => x.path === 'battery.energy');
   rel('+10% battery energy gives +10% endurance (mass held)', be.dHi / sn.y0, 0.1, 1e-9);
   rel('−10% gives −10%', -be.dLo / sn.y0, 0.1, 1e-9);
   ok('angles move by ±1°', sn.rows.find(x => x.path === 'wing.twist').step === 1);
   ok('rows are sorted by their largest swing', sn.rows.every((x, i, a) => !i || Math.max(Math.abs(a[i - 1].dLo), Math.abs(a[i - 1].dHi)) >= Math.max(Math.abs(x.dLo), Math.abs(x.dHi))), sn.rows.map(x => x.path).join(', '));
+  const linked = await runSensitivity({ doc, nodes: nodes(), paths: ['battery.energy'], metric: 'performance.endurance', frac: 0.1 });
+  const lb = linked.rows[0];
+  ok('with linked sizing the pack grows too, so +10% energy gives less than +10% endurance', lb.dHi / linked.y0 > 0.05 && lb.dHi / linked.y0 < 0.1 && lb.up.outputs['mass.total'] > linked.base.outputs['mass.total'], `${(lb.dHi / linked.y0 * 100).toFixed(2)}%`);
   const pm = sn.rows.find(x => x.path === 'payload.mass');
   ok('more payload, less endurance', pm.dHi < 0 && pm.dLo > 0);
 

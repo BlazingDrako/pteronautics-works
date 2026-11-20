@@ -3,7 +3,7 @@
 //   {
 //     schema: 'pteronautics-works/vehicle', version: 1,
 //     id, name, class, role, status: 'active' | 'concept', revision, branch, updated (ISO time),
-//     mission: { ...class-specific flight condition / mission numbers },
+//     mission: { ...class-specific flight condition / mission numbers; fixed-wing: segments (see segments.js) },
 //     components: [ { id, type, name, ...parameters } ],   // typed parts; `type` keys COMPONENT_TYPES
 //     requirements: [ { id, title, metric, op: '>=' | '<=', target, unit, group } ],
 //   }
@@ -11,6 +11,8 @@
 // Every class uses the same document shape; classes differ only in which component types they allow and which
 // analysis graph runs on them. Lengths in m, masses in kg, angles in deg, powers in W, energies in Wh.
 // Positions x are measured aft from the nose (or from the top of the stack for launch vehicles).
+
+import { validateSegments, defaultSegments } from './segments.js';
 
 export const SCHEMA = 'pteronautics-works/vehicle';
 export const VERSION = 1;
@@ -51,11 +53,13 @@ export const COMPONENT_TYPES = {
   propulsor: {
     label: 'Motor & propeller',
     params: [c('kind', 'Kind', 'electric', ['electric']), n('power', 'Max shaft power', 'W', 1500, 10, 5e6, 10), n('propEff', 'Peak prop efficiency', '', 0.78, 0.4, 0.92, 0.01),
-      n('motorEff', 'Motor + ESC efficiency', '', 0.88, 0.5, 0.99, 0.01), n('diameter', 'Prop diameter', 'm', 0.457, 0.05, 6, 0.001), ...massX(1.6, 0.06)],
+      n('motorEff', 'Motor + ESC efficiency', '', 0.88, 0.5, 0.99, 0.01), n('diameter', 'Prop diameter', 'm', 0.457, 0.05, 6, 0.001), ...massX(1.6, 0.06),
+      n('specificPower', 'Specific power', 'W/kg', 940, 20, 20000, 1), c('sizing', 'Mass with power', 'linked', ['linked', 'fixed'])],
   },
   battery: {
     label: 'Battery',
-    params: [n('energy', 'Energy', 'Wh', 888, 1, 1e6, 1), n('usable', 'Usable fraction', '', 0.85, 0.5, 1, 0.01), t('chemistry', 'Chemistry', 'Li-ion 6S'), ...massX(4.9, 0.5)],
+    params: [n('energy', 'Energy', 'Wh', 888, 1, 1e6, 1), n('usable', 'Usable fraction', '', 0.85, 0.5, 1, 0.01), t('chemistry', 'Chemistry', 'Li-ion 6S'), ...massX(4.9, 0.5),
+      n('specificEnergy', 'Specific energy', 'Wh/kg', 180, 10, 1000, 1), c('sizing', 'Mass with energy', 'linked', ['linked', 'fixed'])],
   },
   payload: { label: 'Payload', params: [t('description', 'Description', ''), ...massX(4.5, 0.4)] },
   avionics: { label: 'Avionics', params: [...massX(1.4, 0.35)] },
@@ -87,13 +91,41 @@ export const VEHICLE_CLASSES = {
 
 export const REQUIREMENT_OPS = ['>=', '<='];
 
-// A component with every parameter of its type filled in from the defaults
+// Linked sizing: parts whose mass scales with what they deliver, a = k·b (energy = specific energy × mass).
+// With sizing 'linked' the pack or motor grows with its rating; with 'fixed' its mass stays and k follows.
+//   edit a (energy):  linked → b (mass) moves;   fixed → k moves
+//   edit b (mass):    linked → a moves;          fixed → k moves
+//   edit k:           linked → b moves (same energy, lighter cells);  fixed → a moves (better cells, same mass)
+export const LINKS = {
+  battery: { a: 'energy', b: 'mass', k: 'specificEnergy' },
+  propulsor: { a: 'power', b: 'mass', k: 'specificPower' },
+};
+
+// A component with every parameter of its type filled in from the defaults (a linked part's k from its a and b)
 export function makeComponent(type, id, overrides = {}) {
   const T = COMPONENT_TYPES[type];
   if (!T) throw new Error(`Unknown component type "${type}"`);
   const o = { id, type, name: overrides.name ?? T.label };
   for (const p of T.params) o[p.key] = p.def;
-  return Object.assign(o, overrides);
+  Object.assign(o, overrides);
+  const L = LINKS[type];
+  if (L && overrides[L.k] === undefined && o[L.b] > 0) o[L.k] = o[L.a] / o[L.b];
+  return o;
+}
+
+// Bring an older document up to this schema: parameters added since get their defaults (a linked part's k from
+// its own numbers, so nothing it computes changes), and a fixed-wing vehicle without a mission profile gets one
+// built from its flight condition. Returns the same object.
+export function upgrade(doc) {
+  if (!doc || typeof doc !== 'object' || !Array.isArray(doc.components)) return doc;
+  for (const c of doc.components) {
+    const T = COMPONENT_TYPES[c && c.type]; if (!T) continue;
+    const L = LINKS[c.type];
+    if (L && c[L.k] === undefined && c[L.b] > 0 && typeof c[L.a] === 'number') c[L.k] = c[L.a] / c[L.b];
+    for (const p of T.params) if (c[p.key] === undefined) c[p.key] = p.def;
+  }
+  if (doc.class === 'fixed-wing' && doc.mission && !Array.isArray(doc.mission.segments)) doc.mission.segments = defaultSegments(doc.mission);
+  return doc;
 }
 
 export function paramSpec(type, key) {
@@ -131,6 +163,7 @@ export function validate(doc) {
       else if (p.kind === 'text' && typeof v !== 'string') err.push(`${where}: ${p.key} must be text`);
     }
   }
+  if (doc.mission && doc.mission.segments !== undefined) err.push(...validateSegments(doc.mission.segments));
   if (doc.requirements !== undefined) {
     if (!Array.isArray(doc.requirements)) err.push('requirements must be a list');
     else for (const r of doc.requirements) {
@@ -179,6 +212,19 @@ export function applyEdit(doc, path, value) {
     }
   }
   setPath(doc, path, value);
+  const L = comp && LINKS[comp.type];
+  if (L && [L.a, L.b, L.k].includes(key) && typeof value === 'number') {
+    const linked = comp.sizing !== 'fixed';
+    const move = key === L.k ? (linked ? L.b : L.a) : linked ? (key === L.a ? L.b : L.a) : L.k;
+    const want = move === L.a ? comp[L.k] * comp[L.b] : move === L.b ? comp[L.a] / comp[L.k] : comp[L.a] / comp[L.b];
+    const spec = paramSpec(comp.type, move);
+    if (isFinite(want)) {
+      comp[move] = Math.min(spec.max, Math.max(spec.min, want));
+      changed.push(`${comp.id}.${move}`);
+      // a clamped value leaves k to keep a = k·b
+      if (comp[move] !== want && move !== L.k) { comp[L.k] = comp[L.a] / comp[L.b]; changed.push(`${comp.id}.${L.k}`); }
+    }
+  }
   return changed;
 }
 
@@ -194,6 +240,7 @@ export function toJSON(doc) { return JSON.stringify(doc, null, 2) + '\n'; }
 export function fromJSON(text) {
   let doc;
   try { doc = JSON.parse(text); } catch (e) { throw new Error('Not valid JSON: ' + e.message); }
+  upgrade(doc);
   const err = validate(doc);
   if (err.length) throw new Error('Not a valid vehicle document: ' + err.slice(0, 4).join('; '));
   return doc;

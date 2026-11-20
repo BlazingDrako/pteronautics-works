@@ -13,6 +13,9 @@ import { evaluateRequirements, readMetric } from './requirements.js';
 
 // Outputs worth trading on, with how to show them; better: 1 more is better, −1 less is, 0 neither. Requirement metrics not listed here are added by metricsFor().
 export const TRADE_METRICS = [
+  { metric: 'mission.margin', label: 'Mission energy margin', unit: '% usable', d: 1, better: 1 },
+  { metric: 'mission.energy', label: 'Mission energy', unit: 'Wh', d: 0, better: -1 },
+  { metric: 'mission.duration', label: 'Mission time', unit: 'min', d: 0, better: 0 },
   { metric: 'performance.endurance', label: 'Endurance (best)', unit: 'min', d: 0, better: 1 },
   { metric: 'performance.range', label: 'Range (best)', unit: 'km', d: 0, better: 1 },
   { metric: 'performance.cruise.endurance', label: 'Endurance at cruise', unit: 'min', d: 0, better: 1 },

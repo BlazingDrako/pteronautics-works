@@ -1,7 +1,7 @@
 // The aircraft workspace: systems tree and editors on the left, the vehicle view with lens panels in the centre,
 // the coupling graph and fidelity on the right, stat cards and the live requirements list along the bottom.
 import { h, s, icon, brand, themeButton, fx, fsig, pct, minus, ago, toast } from './dom.js';
-import { COMPONENT_TYPES, VEHICLE_CLASSES, applyEdit, firstOf } from '../model/vehicle.js';
+import { COMPONENT_TYPES, VEHICLE_CLASSES, applyEdit, firstOf, getPath, LINKS } from '../model/vehicle.js';
 import { saveVehicle, downloadVehicle, pickVehicleFile, resetVehicle, isModified } from '../model/store.js';
 import { seeds } from '../model/seeds.js';
 import { CouplingGraph } from '../engine/graph.js';
@@ -56,6 +56,7 @@ export function renderWorkspace(root, doc) {
         h('a', { class: 'vtab', href: '#/v/vireo-2', role: 'tab', 'aria-selected': 'false' }, 'Vireo-2')),
       h('span', { class: 'grow' }),
       revPill,
+      h('a', { class: 'btn small', href: `#/v/${doc.id}/mission`, title: 'Plan the mission profile: climb, transits, survey, reserve' }, icon('mission'), 'Mission'),
       h('a', { class: 'btn small', href: `#/v/${doc.id}/trade`, title: 'Sweep design values through the coupled analyses' }, icon('bars'), 'Trade study'),
       h('button', { class: 'btn small', type: 'button', title: 'Download this vehicle as a .json file', onclick: () => downloadVehicle(doc) }, icon('download'), 'Save .json'),
       h('button', { class: 'btn small', type: 'button', title: 'Replace this vehicle with one from a .json file', onclick: loadFile }, icon('upload'), 'Load .json'),
@@ -74,9 +75,14 @@ export function renderWorkspace(root, doc) {
     const changed = applyEdit(doc, path, value);
     doc.updated = new Date().toISOString();
     graph.invalidate(changed);
-    if (changed.length > 1) paintTree();
+    if (changed.length > 1) { paintTree(); syncFields(changed, path); }
     run();
     clearTimeout(saveTimer); saveTimer = setTimeout(() => { saveVehicle(doc); paintRev(); }, 250);
+  }
+  // a linked edit (battery energy moves its mass) updates the other fields of the open part in place
+  function syncFields(changed, path) {
+    const f = editor._fields; if (!f) return;
+    for (const p of changed) { if (p === path) continue; const [cid, key] = p.split('.'); if (cid === ui.sel && f[key]) f[key](getPath(doc, p)); }
   }
   function editRequirement(id, target) {
     const r = doc.requirements.find(x => x.id === id); if (!r) return;
@@ -137,7 +143,9 @@ export function renderWorkspace(root, doc) {
       num.classList.remove('invalid'); range.value = v; fill(); onInput(v);
     });
     fill();
-    return h('div', { class: 'field' }, h('div', { class: 'field-top' }, h('label', {}, label), h('span', { class: 'row', style: { gap: '6px' } }, num, h('span', { class: 'unit' }, unit || ''))), range);
+    const el = h('div', { class: 'field' }, h('div', { class: 'field-top' }, h('label', {}, label), h('span', { class: 'row', style: { gap: '6px' } }, num, h('span', { class: 'unit' }, unit || ''))), range);
+    el._set = v => { range.value = v; num.value = +(+v).toPrecision(6); num.classList.remove('invalid'); fill(); };
+    return el;
   }
   // slider range around the current design (the number box accepts the full valid range)
   function sliderRange(p, v, comp) {
@@ -150,12 +158,12 @@ export function renderWorkspace(root, doc) {
     if (ui.sel === 'mass') return paintMassPanel();
     const comp = doc.components.find(c => c.id === ui.sel);
     if (!comp) { editor.replaceChildren(); return; }
-    const T = COMPONENT_TYPES[comp.type];
+    const T = COMPONENT_TYPES[comp.type], setters = {};
     const fields = T.params.map(p => {
       const path = `${comp.id}.${p.key}`, v = comp[p.key];
-      if (p.kind === 'number') return numberField(p.label, p.unit, v, { ...p, ...sliderRange(p, v, comp) }, val => edit(path, val));
+      if (p.kind === 'number') { const f = numberField(p.label, p.unit, v, { ...p, ...sliderRange(p, v, comp) }, val => edit(path, val)); setters[p.key] = f._set; return f; }
       if (p.kind === 'choice') {
-        const sel = h('select', { class: 'txt', 'aria-label': p.label, onchange: e => edit(path, e.target.value) }, p.options.map(o => h('option', { value: o, selected: o === v }, o)));
+        const sel = h('select', { class: 'txt', 'aria-label': p.label, onchange: e => { edit(path, e.target.value); if (p.key === 'sizing') paintDerived(); } }, p.options.map(o => h('option', { value: o, selected: o === v }, o)));
         return h('div', { class: 'field' }, h('div', { class: 'field-top' }, h('label', {}, p.label), sel));
       }
       const airfoil = /Airfoil$/.test(p.key);
@@ -169,7 +177,7 @@ export function renderWorkspace(root, doc) {
     });
     const derived = h('div', { class: 'derived-box' });
     editor.replaceChildren(h('div', { class: 'sec-row' }, h('span', { class: 'sec' }, comp.name), h('span', { class: 'muted', style: { fontSize: '12px' } }, T.label)), ...fields, derived);
-    editor._derived = { box: derived, comp };
+    editor._derived = { box: derived, comp }; editor._fields = setters;
     paintDerived();
   }
   function paintDerived() {
@@ -178,9 +186,13 @@ export function renderWorkspace(root, doc) {
     if (d.comp.type === 'wing' && g) rows.push(['Area S', `${fx(g.S, 3)} m²`], ['Aspect ratio', fx(g.AR, 2)], ['Tip chord', `${fx(g.ct * 1000, 0)} mm`], ['MAC', `${fx(g.mac * 1000, 0)} mm`], ['Wing mass', m ? `${fx(m.items.find(i => i.derived)?.mass, 2)} kg` : '—']);
     if (d.comp.type === 'htail' && g && g.ht && out.stability) rows.push(['Tail volume V_H', fx(out.stability.VH, 3)], ['Span', `${fx(g.ht.b, 3)} m`]);
     if (d.comp.type === 'vtail' && out.stability) rows.push(['Fin volume V_V', fx(out.stability.VV, 4)]);
-    if (d.comp.type === 'battery' && m) rows.push(['Specific energy', `${fx(d.comp.energy / d.comp.mass, 0)} Wh/kg`], ['Usable energy', `${fx(d.comp.energy * d.comp.usable, 0)} Wh`]);
+    if (d.comp.type === 'battery' && m) rows.push(['Usable energy', `${fx(d.comp.energy * d.comp.usable, 0)} Wh`]);
     if (d.comp.type === 'propulsor' && m) rows.push(['Power loading', `${fx(d.comp.power / m.total, 0)} W/kg`]);
-    d.box.replaceChildren(...(rows.length ? [h('div', { class: 'sec', style: { margin: '14px 0 4px' } }, 'Derived')] : []), ...rows.map(([k, v]) => h('div', { class: 'derived' }, h('span', {}, k), h('span', { class: 'mono' }, v))));
+    const L = LINKS[d.comp.type];
+    const link = L ? h('p', { class: 'note', style: { marginTop: '8px' } }, d.comp.sizing === 'fixed'
+      ? `Fixed: the mass stays as set; changing the ${L.a} changes the ${L.k === 'specificEnergy' ? 'specific energy' : 'specific power'}.`
+      : `Linked: the mass follows the ${L.a} at ${fx(d.comp[L.k], 0)} ${L.k === 'specificEnergy' ? 'Wh/kg' : 'W/kg'}, so a bigger ${d.comp.type === 'battery' ? 'pack' : 'motor'} weighs more. Setting the mass changes the ${L.a}.`) : null;
+    d.box.replaceChildren(...(rows.length ? [h('div', { class: 'sec', style: { margin: '14px 0 4px' } }, 'Derived')] : []), ...rows.map(([k, v]) => h('div', { class: 'derived' }, h('span', {}, k), h('span', { class: 'mono' }, v))), ...(link ? [link] : []));
   }
   function paintMassPanel() {
     editor._derived = null;
@@ -336,7 +348,18 @@ export function renderWorkspace(root, doc) {
         kv('Cruise CL', fx(p.cruise.CL, 3)), kv('Cruise L/D', fx(p.cruise.LD, 1)), kv('Max L/D', fx(p.LDmax, 1)), kv('Best climb', `${fx(p.RoC, 2)} m/s @ ${fx(p.Vy, 1)} m/s`),
         kv('Max level speed', `${fx(p.Vmax, 1)} m/s`), kv('Stall (1 g)', `${fx(p.Vs, 1)} m/s`), kv('Usable energy', `${fx(p.E, 0)} Wh`),
         atm ? kv('Air density', `${fx(atm.cruise.rho, 4)} kg/m³`) : null, atm ? kv('Temperature', `${fx(atm.cruise.T - 273.15, 1)} °C`) : null),
-      h('div', { class: 'placeholder' }, 'Later slices: a segmented mission (climb, survey legs, loiter, reserve), wind, and battery voltage sag.'));
+      missionCard(out));
+  }
+  function missionCard(out) {
+    const m = out.mission;
+    const link = h('a', { class: 'btn small primary', href: `#/v/${doc.id}/mission` }, icon('mission'), 'Open the mission planner');
+    if (!m) return h('div', { class: 'placeholder' }, 'The mission profile is not computed (see the coupling graph). ', link);
+    return h('div', { class: 'plot-card' }, h('h4', {}, 'Mission profile', h('span', { class: 'sub' }, `${m.segments.length} segments`)),
+      h('div', { class: 'kv' },
+        kv('Mission energy', isFinite(m.energy) ? `${fx(m.energy, 0)} of ${fx(m.usable, 0)} Wh` : 'cannot be flown'), kv('Left after reserve', isFinite(m.margin) ? `${fx(m.margin, 1)}%` : '—'),
+        kv('Flight time', `${fx(m.duration, 0)} min`), kv('Distance', `${fx(m.distance, 1)} km`)),
+      m.errors.length ? h('p', { class: 'note bad' }, m.errors.join(' · ')) : null,
+      h('div', { style: { marginTop: '10px' } }, link));
   }
   function wingPane(out) {
     const g = out.geometry, ae = out.aero, st = out.stability;
