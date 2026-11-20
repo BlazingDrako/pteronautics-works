@@ -54,4 +54,11 @@ export async function sailplaneTests(log) {
   const ld = sw.samples.map(s => s.outputs['glide.LDmax']);
   ok('trade: more span, better glide', ld[0] < ld[1] && ld[1] < ld[2], ld.map(v => v.toFixed(1)).join(' '));
   ok('trade: the 18 m class rule fails past 18 m', sw.samples[2].reqs.find(q => q.id === 'R-08').status === 'fail');
+
+  // the hangar card is drawn from the design (browser only: it needs the DOM)
+  if (typeof document !== 'undefined') {
+    const { sketch } = await import('../../src/ui/sketches.js');
+    const a = sketch(tern).innerHTML, d2 = clone(tern); applyEdit(d2, 'wing.span', 15);
+    ok('the hangar card is drawn from Tern\'s own geometry, and follows a span edit', a.length > 0 && sketch(d2).innerHTML !== a && !a.includes('stroke-dasharray:2 3'));
+  }
 }

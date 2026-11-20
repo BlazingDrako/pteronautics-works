@@ -1,7 +1,8 @@
-// Card sketches. Fixed-wing vehicles are drawn from their own geometry, to scale; the concept classes use fixed
-// drawings until their classes are implemented.
+// Card sketches. Vehicles of a class this build analyses (fixed-wing, sailplanes) are drawn from their own geometry,
+// to scale, so the card follows every edit; the concept classes use fixed drawings until their classes are implemented.
 import { s } from './dom.js';
 import { planformShapes } from './planform.js';
+import { VEHICLE_CLASSES } from '../model/vehicle.js';
 
 const FIXED = {
   'high-speed': `<path d="M140,14 L118,140 M140,14 L162,140" class="sk-hl" style="stroke-width:.8;stroke-dasharray:3 3;opacity:.7"/>
@@ -30,7 +31,7 @@ const FIXED = {
 
 export function sketch(v) {
   const svg = s('svg', { viewBox: '0 0 280 170', 'aria-hidden': 'true', preserveAspectRatio: 'xMidYMid meet' });
-  if (v.class === 'fixed-wing') {
+  if (VEHICLE_CLASSES[v.class]?.implemented && v.components?.some(c => c.type === 'wing')) {
     try { planformShapes(svg, v, { x: 14, y: 16, w: 252, h: 140 }, { compact: true }); return svg; } catch { /* fall through */ }
   }
   svg.innerHTML = FIXED[v.class] || FIXED.sailplane;

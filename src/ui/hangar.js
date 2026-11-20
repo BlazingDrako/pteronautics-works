@@ -31,7 +31,7 @@ function reqBar(sum) {
 function card(v) {
   const live = VEHICLE_CLASSES[v.class]?.implemented;
   const sum = live ? liveSummary(v) : null;
-  const tags = v.tags || (v.class === 'fixed-wing' ? fixedWingTags(v) : []);
+  const tags = live ? liveTags(v) : v.tags || [];
   const span = v.components.find(c => c.type === 'wing')?.span;
   const badge = v.badge || (live && span ? `b ${fx(span, 1)} m` : VEHICLE_CLASSES[v.class]?.label);
   const body = [
@@ -46,6 +46,16 @@ function card(v) {
   return opensWorkspace(v) ? h('a', { class: 'card', href: '#/v/' + v.id, 'aria-label': `Open ${v.name}` }, body) : h('div', { class: 'card' }, body);
 }
 
+// tags from the design itself, so they follow edits
+function liveTags(v) {
+  if (v.class === 'sailplane') {
+    const w = v.components.find(c => c.type === 'wing');
+    if (!w) return [];
+    const S = w.span * w.rootChord * (1 + w.taper) / 2;
+    return [`NACA ${w.rootAirfoil}`, `AR ${fx(w.span * w.span / S, 1)}`, `${fx(v.mission?.climbRate ?? 1.5, 1)} m/s climbs`];
+  }
+  return fixedWingTags(v);
+}
 function fixedWingTags(v) {
   const w = v.components.find(c => c.type === 'wing'), b = v.components.find(c => c.type === 'battery'), p = v.components.find(c => c.type === 'propulsor');
   return [w && `NACA ${w.rootAirfoil}`, b && `${b.chemistry ? b.chemistry.split(' ').pop() + ' ' : ''}${b.energy} Wh`, p && `${(p.power / 1000).toFixed(1)} kW`].filter(Boolean);
