@@ -5,6 +5,9 @@ import { kestrel } from '../../src/model/seeds.js';
 import { clone, applyEdit, firstOf, validate, fromJSON, upgrade, LINKS } from '../../src/model/vehicle.js';
 import { validateSegments, makeSegment, defaultSegments, newSegmentId } from '../../src/model/segments.js';
 import { Perf } from '../../src/adapters/aircraft.js';
+import { packDraw } from '../../src/analyses/mission.js';
+import { runStudy, tradeVariables } from '../../src/analyses/trade.js';
+import { getPath } from '../../src/model/vehicle.js';
 
 function solve(doc) {
   const g = new CouplingGraph(fixedWingNodes()); g.runSync(doc);
@@ -12,7 +15,7 @@ function solve(doc) {
   return { g, o };
 }
 
-export function missionTests(log) {
+export async function missionTests(log) {
   const ok = (name, cond, detail = '') => log(name, !!cond, detail);
   const rel = (name, v, ref, tol) => ok(name, Math.abs(v / ref - 1) <= tol, `got ${(+v).toPrecision(6)}, expected ${(+ref).toPrecision(6)} (±${tol})`);
   const bat = d => firstOf(d, 'battery'), mot = d => firstOf(d, 'propulsor');
@@ -61,14 +64,16 @@ export function missionTests(log) {
   // ---------- the mission profile ----------
   const { o } = solve(clone(base)), m = o.mission, seg = id => m.segments.find(x => x.id === id);
   ok('mission: Kestrel\'s survey mission flies, every segment without an error', m.feasible && m.segments.every(x => !x.error), m.segments.map(x => x.error).filter(Boolean).join('; '));
-  rel('mission: cruise battery power equals the Performance node\'s at the same speed and altitude', seg('s2').P, o.performance.cruise.P, 1e-9);
+  const hotel = base.mission.hotelPower, pack = { voltage: bat(base).voltage, resistance: bat(base).resistance };
+  rel('mission: cruise power is the Performance node\'s at the same speed and height, plus the hotel load', seg('s2').P, o.performance.cruise.P + hotel, 1e-9);
   rel('mission: a cruise leg takes distance / (airspeed − headwind)', (seg('s2').t1 - seg('s2').t0), 18000 / (22 - 4), 1e-12);
   rel('mission: …and a tailwind shortens it', (seg('s4').t1 - seg('s4').t0), 18000 / 26, 1e-12);
-  rel('mission: a loiter\'s energy is its power × time', seg('s3').E, seg('s3').P * 55 / 60, 1e-12);
+  rel('mission: a loiter\'s energy is what the cells give at its power, × time', seg('s3').E, packDraw(seg('s3').P, pack).cell * 48 / 60, 1e-12);
   const ac = Perf.AIRCRAFT.find(a => a.id === 'works:kestrel'), W = o.mass.total * 9.80665;
   rel('mission: climb time agrees with the core\'s time to climb', (seg('s1').t1 - seg('s1').t0), Perf.timeToClimb(ac, 0, W, 'max', 400, 0).t ?? Perf.timeToClimb(ac, 0, W, 'max', 400, 0), 0.03);
   rel('mission: the glide covers the height × the best L/D', seg('s5').x1 - seg('s5').x0, 0.4 * o.performance.LDmax, 0.02);
-  ok('mission: the glide uses no energy and ends on the ground', seg('s5').E === 0 && Math.abs(seg('s5').z1) < 1e-9);
+  rel('mission: the glide draws only the hotel load', seg('s5').E, packDraw(hotel, pack).cell * (seg('s5').t1 - seg('s5').t0) / 3600, 1e-9);
+  ok('mission: …and ends on the ground', Math.abs(seg('s5').z1) < 1e-9);
   const sum = m.segments.reduce((s, x) => s + x.E, 0);
   rel('mission: the energy used is the sum of the segments, reserve included', m.energy, sum, 1e-12);
   rel('mission: margin = (usable − used) / usable', m.margin, (bat(base).energy * bat(base).usable - sum) / (bat(base).energy * bat(base).usable) * 100, 1e-12);
@@ -77,7 +82,30 @@ export function missionTests(log) {
 
   const res = clone(base); res.mission.segments = [makeSegment('climb', 's1', { to: 400 }), makeSegment('reserve', 's2', { time: 10 })];
   const ro = solve(res).o;
-  rel('mission: the reserve is held at the best-endurance power', ro.mission.segments[1].P, ro.performance.Pend, 0.005);
+  rel('mission: the reserve is held at the best-endurance power, plus the hotel load', ro.mission.segments[1].P, ro.performance.Pend + hotel, 0.005);
+
+  // the pack and the hotel load
+  const pd = packDraw(1000, { voltage: 20, resistance: 0.02 });
+  rel('pack: the cells give the terminal power plus I²R', pd.cell, 1000 + pd.loss, 1e-12);
+  rel('pack: …with I from V₀·I − I²R = P', 20 * pd.I - pd.I * pd.I * 0.02, 1000, 1e-12);
+  ok('pack: no resistance, no loss', packDraw(500, { voltage: 20, resistance: 0 }).cell === 500);
+  ok('pack: beyond V₀²/4R the pack cannot deliver', !!packDraw(6000, { voltage: 20, resistance: 0.02 }).error);
+  ok('pack: the climb loses the most per minute (loss grows with current²)', seg('s1').loss / (seg('s1').t1 - seg('s1').t0) > seg('s3').loss / (seg('s3').t1 - seg('s3').t0), `${seg('s1').loss.toFixed(2)} Wh in the climb`);
+  const ideal = clone(base); bat(ideal).resistance = 0; ideal.mission.hotelPower = 0;
+  const io = solve(ideal).o.mission;
+  ok('pack: with no resistance and no hotel load, the losses are zero and the margin is higher', io.loss === 0 && io.margin > m.margin, `${io.margin.toFixed(2)}% vs ${m.margin.toFixed(2)}%`);
+  const hot = clone(ideal); hot.mission.hotelPower = 50;
+  rel('hotel: 50 W costs 50 W × the time flown, plus the reserve\'s share', solve(hot).o.mission.energy - io.energy, 50 * (io.duration / 60 + 10 / 60), 1e-6);
+
+  // field elevation
+  const hi = clone(base); hi.mission.fieldElevation = 1500;
+  const hm = solve(hi).o.mission;
+  ok('field: from a 1500 m field, the climb is slower and the cruise takes more power', (hm.segments[0].t1 - hm.segments[0].t0) > (seg('s1').t1 - seg('s1').t0) && hm.segments[1].P > seg('s2').P);
+  ok('field: heights stay above the field', hm.segments[0].z1 === 400 && hm.field === 1500);
+
+  // segment values as design variables
+  ok('paths: a segment value reads and writes by mission.segments.<id>.<key>', getPath(base, 'mission.segments.s3.time') === 48 && (() => { const c = clone(base); const ch = applyEdit(c, 'mission.segments.s3.time', 60); return c.mission.segments[2].time === 60 && ch.includes('mission.segments'); })());
+  ok('trade: segment values and mission settings are trade variables', tradeVariables(base).some(v => v.path === 'mission.segments.s3.time' && v.group === 'Mission · Survey grid') && tradeVariables(base).some(v => v.path === 'mission.hotelPower'));
 
   const slow = clone(base); slow.mission.segments[2].speed = 15;
   const so = solve(slow).o;
@@ -95,4 +123,8 @@ export function missionTests(log) {
   ok('mission: 2 kg more payload costs energy margin', solve(heavy).o.mission.margin < m.margin);
   const g = solve(clone(base)).g;
   ok('mission: a segment edit reruns only the mission and the requirements', g.invalidate('mission.segments').sort().join() === 'mission,requirements');
+
+  const sw = await runStudy({ doc: base, nodes: fixedWingNodes(), axes: [{ path: 'mission.segments.s3.time', values: [40, 50, 60, 70] }] });
+  const mg = sw.samples.map(x => x.outputs['mission.margin']);
+  ok('trade: sweeping the survey time lowers the margin in equal steps', mg.every((v, i) => !i || v < mg[i - 1]) && Math.abs((mg[0] - mg[1]) - (mg[2] - mg[3])) < 1e-6, mg.map(v => v.toFixed(2)).join(' '));
 }

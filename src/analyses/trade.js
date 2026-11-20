@@ -8,7 +8,8 @@
 // edited path reaches (a battery-mass sample skips geometry and aero). Nothing here touches the DOM; the trade page
 // draws the results.
 import { CouplingGraph } from '../engine/graph.js';
-import { COMPONENT_TYPES, applyEdit, clone, getPath, firstOf } from '../model/vehicle.js';
+import { COMPONENT_TYPES, applyEdit, clone, getPath, firstOf, MISSION_SETTINGS } from '../model/vehicle.js';
+import { SEGMENT_KINDS } from '../model/segments.js';
 import { evaluateRequirements, readMetric } from './requirements.js';
 
 // Outputs worth trading on, with how to show them; better: 1 more is better, −1 less is, 0 neither. Requirement metrics not listed here are added by metricsFor().
@@ -62,6 +63,12 @@ export function tradeVariables(doc) {
       out.push({ path: `${c.id}.${p.key}`, label: p.label, group: c.name, unit: p.unit || '', value: c[p.key], min: p.min, max: p.max, step: p.step });
   }
   for (const m of MISSION_VARS) out.push({ path: 'mission.' + m.key, label: m.label, group: 'Flight condition', unit: m.unit, value: doc.mission?.[m.key] ?? 0, min: m.min, max: m.max, step: m.step });
+  // the mission: its settings and each segment's values
+  if (Array.isArray(doc.mission?.segments)) {
+    for (const m of MISSION_SETTINGS) if (typeof doc.mission[m.key] === 'number') out.push({ path: 'mission.' + m.key, label: m.label, group: 'Mission', unit: m.unit, value: doc.mission[m.key], min: m.min, max: m.max, step: m.step });
+    for (const sg of doc.mission.segments) for (const p of SEGMENT_KINDS[sg.kind]?.params || [])
+      out.push({ path: `mission.segments.${sg.id}.${p.key}`, label: p.label, group: `Mission · ${sg.name || SEGMENT_KINDS[sg.kind].label}`, unit: p.unit, value: sg[p.key], min: p.min, max: p.max, step: p.step });
+  }
   return out;
 }
 export const variableInfo = (doc, path) => tradeVariables(doc).find(v => v.path === path) || null;

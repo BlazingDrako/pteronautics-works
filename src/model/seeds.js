@@ -10,11 +10,11 @@ export function kestrel() {
   return base({
     id: 'kestrel', name: 'Kestrel', class: 'fixed-wing', role: 'Electric survey UAS', status: 'active', revision: 14, branch: 'endurance-push',
     mission: {
-      altitude: 400, dT: 0, cruiseSpeed: 22,
+      altitude: 400, dT: 0, cruiseSpeed: 22, fieldElevation: 0, hotelPower: 30,
       segments: [
         G('climb', 's1', { name: 'Climb out', to: 400 }),
         G('cruise', 's2', { name: 'Transit to site', distance: 18, speed: 22, wind: 4 }),
-        G('loiter', 's3', { name: 'Survey grid', time: 55, speed: 21 }),
+        G('loiter', 's3', { name: 'Survey grid', time: 48, speed: 21 }),
         G('cruise', 's4', { name: 'Transit home', distance: 18, speed: 22, wind: -4 }),
         G('descent', 's5', { name: 'Descent', to: 0 }),
         G('reserve', 's6', { name: 'Reserve', time: 10 }),
@@ -26,7 +26,7 @@ export function kestrel() {
       C('htail', 'htail', { name: 'Horizontal tail', area: 0.16, aspect: 4.5, sweep: 5, x: 1.55, efficiency: 0.9, tau: 0.5, mass: 0.55 }),
       C('vtail', 'vtail', { name: 'Fin & rudder', area: 0.1, aspect: 1.6, sweep: 25, x: 1.58, height: 0.2, mass: 0.35 }),
       C('propulsor', 'propulsor', { name: 'Motor & 18×10 prop', power: 1500, propEff: 0.78, motorEff: 0.88, diameter: 0.457, mass: 1.6, x: 0.06 }),
-      C('battery', 'battery', { name: 'Battery 6S', energy: 888, usable: 0.85, chemistry: 'Li-ion 6S', mass: 4.9, x: 0.62 }),
+      C('battery', 'battery', { name: 'Battery 6S', energy: 888, usable: 0.85, chemistry: 'Li-ion 6S', mass: 4.9, x: 0.62, voltage: 21.6, resistance: 0.012 }),
       C('payload', 'payload', { name: 'Survey camera & LiDAR', description: 'Gimballed RGB camera and LiDAR', mass: 4.5, x: 0.55 }),
       C('avionics', 'avionics', { name: 'Avionics', mass: 1.4, x: 0.45 }),
       C('systems', 'systems', { name: 'Servos, wiring, gear', description: 'Servos, wiring harness, landing skids', mass: 1.8, x: 0.8 }),

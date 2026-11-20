@@ -182,14 +182,15 @@ export function fixedWingNodes({ airfoil = null } = {}) {
     {
       // The mission profile (doc.mission.segments) flown segment by segment: time, distance and battery energy
       id: 'mission', label: 'Mission', detail: 'profile', after: ['geometry', 'aero', 'mass', 'atmosphere'],
-      reads: ['mission.segments', 'mission.dT', 'propulsor.*', 'battery.*'],
+      reads: ['mission.segments', 'mission.dT', 'mission.fieldElevation', 'mission.hotelPower', 'propulsor.*', 'battery.*'],
       outputs: ['segments', 'track', 'energy', 'usable', 'margin', 'duration', 'distance', 'feasible'],
       run({ doc, inputs }) {
         const g = inputs.geometry, ae = inputs.aero, m = inputs.mass;
         const prop = firstOf(doc, 'propulsor'), bat = firstOf(doc, 'battery');
         if (!prop || !bat) throw new Error('needs a motor and a battery');
         const ac = A.perfAircraft('works:' + doc.id, { S: g.S, b: g.span, e: ae.e, CD0: ae.CD0, CLa: ae.CLa, CLmax: ae.CLmax, mass: m.total, power: prop.power, propEff: prop.propEff });
-        return flyMission({ segments: doc.mission.segments || [], ac, W: m.total * A.G0, motorEff: prop.motorEff, usable: bat.energy * bat.usable, dT: doc.mission.dT ?? 0 });
+        return flyMission({ segments: doc.mission.segments || [], ac, W: m.total * A.G0, motorEff: prop.motorEff, usable: bat.energy * bat.usable, dT: doc.mission.dT ?? 0,
+          field: doc.mission.fieldElevation ?? 0, hotel: doc.mission.hotelPower ?? 0, pack: { voltage: bat.voltage, resistance: bat.resistance } });
       },
     },
     {

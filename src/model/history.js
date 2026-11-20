@@ -13,7 +13,9 @@ const write = (k, v) => { try { ls()?.setItem(k, JSON.stringify(v)); } catch { }
 // What an edit to a path means, in words: "Battery 6S · Energy → 1000 Wh"
 export function describeEdit(doc, path, value) {
   const i = path.indexOf('.'), head = path.slice(0, i), key = path.slice(i + 1);
-  if (head === 'mission') return key === 'segments' ? 'Mission profile edited' : `Flight condition · ${key} → ${value}`;
+  const sm = head === 'mission' && /^segments\.([^.]+)\.([^.]+)$/.exec(key);
+  if (sm) { const sg = doc.mission?.segments?.find(s => s.id === sm[1]); return `Mission · ${sg?.name || sm[1]} · ${sm[2]} → ${value}`; }
+  if (head === 'mission') return key === 'segments' ? 'Mission profile edited' : `Mission · ${key} → ${value}`;
   const c = component(doc, head), p = c && COMPONENT_TYPES[c.type]?.params.find(x => x.key === key);
   if (!c || !p) return `${path} → ${value}`;
   const v = typeof value === 'number' ? +value.toPrecision(5) : value;

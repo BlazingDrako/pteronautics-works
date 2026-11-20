@@ -524,3 +524,4 @@ tr.ms-bad td { background: color-mix(in srgb, var(--bad) 6%, transparent); }
 .rq-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--text-2); }
 .rq-log li { border-left: 2px solid var(--border); padding-left: 10px; }
 .rq-log .note { margin-top: 2px; }
+.ms-settings { border-left-color: var(--border-strong); background: var(--bg-sunk); }
