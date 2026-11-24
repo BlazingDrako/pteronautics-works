@@ -8,15 +8,16 @@ export const nice = (lo, hi, n = 5) => {
   return out;
 };
 
-// chart({ w, h, x: [lo, hi], y: [lo, hi], series: [{ pts: [[x, y]], cls }], marks: [{ x, label, cls }], xLabel, yLabel, compact })
+// chart({ w, h, x: [lo, hi], y: [lo, hi], series: [{ pts: [[x, y]], cls, style }], marks: [{ x, label, cls }], xLabel, yLabel, compact,
+//         xFmt, yFmt (tick formatters), hmarks: [{ y, cls }] })
 export function chart(o) {
   const { w = 480, h = 260, compact = false } = o;
   const pad = compact ? { l: 30, r: 8, t: 8, b: 20 } : { l: 52, r: 16, t: o.legend ? 30 : 14, b: 38 };
   const [x0, x1] = o.x, [y0, y1] = o.y;
   const X = v => pad.l + (v - x0) / (x1 - x0) * (w - pad.l - pad.r), Y = v => h - pad.b - (v - y0) / (y1 - y0) * (h - pad.t - pad.b);
   const svg = s('svg', { viewBox: `0 0 ${w} ${h}`, role: 'img', 'aria-label': o.label || 'chart' });
-  for (const v of nice(y0, y1, compact ? 3 : 5)) { svg.append(s('line', { x1: pad.l, x2: w - pad.r, y1: Y(v), y2: Y(v), class: 'grid-l' }), s('text', { x: pad.l - 5, y: Y(v) + 3.5, class: 'ax-t', 'text-anchor': 'end' }, fmt(v))); }
-  for (const v of nice(x0, x1, compact ? 4 : 7)) svg.append(s('text', { x: X(v), y: h - pad.b + 13, class: 'ax-t', 'text-anchor': 'middle' }, fmt(v)));
+  for (const v of nice(y0, y1, compact ? 3 : 5)) { svg.append(s('line', { x1: pad.l, x2: w - pad.r, y1: Y(v), y2: Y(v), class: 'grid-l' }), s('text', { x: pad.l - 5, y: Y(v) + 3.5, class: 'ax-t', 'text-anchor': 'end' }, (o.yFmt || fmt)(v))); }
+  for (const v of nice(x0, x1, compact ? 4 : 7)) svg.append(s('text', { x: X(v), y: h - pad.b + 13, class: 'ax-t', 'text-anchor': 'middle' }, (o.xFmt || fmt)(v)));
   svg.append(s('path', { d: `M${pad.l},${pad.t} L${pad.l},${h - pad.b} L${w - pad.r},${h - pad.b}`, class: 'ax' }));
   if (o.xLabel) svg.append(s('text', { x: (pad.l + w - pad.r) / 2, y: h - 4, class: 'ax-label', 'text-anchor': 'middle' }, o.xLabel));
   if (o.yLabel) svg.append(s('text', { x: 12, y: (pad.t + h - pad.b) / 2, class: 'ax-label', 'text-anchor': 'middle', transform: `rotate(-90 12 ${(pad.t + h - pad.b) / 2})` }, o.yLabel));
@@ -38,8 +39,9 @@ export function chart(o) {
       if (!isFinite(p[0]) || !isFinite(p[1]) || !inY(p[1])) { pen = false; continue; }
       d += `${pen ? ' L' : ' M'}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`; pen = true;
     }
-    if (d) svg.append(s('path', { d: d.trim(), class: se.cls || 's-accent' }));
+    if (d) svg.append(s('path', { d: d.trim(), class: se.cls || 's-accent', style: se.style }));
   }
+  for (const m of o.hmarks || []) { if (isFinite(m.y) && m.y >= y0 && m.y <= y1) svg.append(s('line', { x1: pad.l, x2: w - pad.r, y1: Y(m.y), y2: Y(m.y), class: m.cls || 's-muted' })); }
   for (const m of o.marks || []) {
     if (!isFinite(m.x) || m.x < x0 || m.x > x1) continue;
     svg.append(s('line', { x1: X(m.x), x2: X(m.x), y1: pad.t, y2: h - pad.b, class: m.cls || 's-muted' }));

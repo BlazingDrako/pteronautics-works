@@ -8,6 +8,8 @@
 //   #/v/<id>/compare  two designs of vehicle <id> side by side (current, seed, snapshots)
 //   #/v/<id>/optimize  optimise vehicle <id> over chosen variables, with its requirements as constraints
 //   #/library/<tab>?v=<id>  part libraries (airfoils, motors, cells, materials), applied to vehicle <id>
+//   #/orbit[/<id>]  Orbit tab (mission and trajectory), optionally coupled to a spacecraft or launch vehicle
+//   #/pilot[/<id>]  Pilot tab (flight dynamics and controls) on a fixed-wing vehicle
 import { initTheme, h } from './ui/dom.js';
 import { renderHangar, opensWorkspace } from './ui/hangar.js';
 import { renderWorkspace } from './ui/workspace.js';
@@ -19,6 +21,8 @@ import { renderReport } from './ui/report.js';
 import { renderCompare } from './ui/compare.js';
 import { renderLibrary } from './ui/library.js';
 import { renderOptimize } from './ui/optimize.js';
+import { renderOrbit } from './ui/orbit.js';
+import { renderPilot } from './ui/pilot.js';
 import { loadVehicle } from './model/store.js';
 import { VEHICLE_CLASSES } from './model/vehicle.js';
 
@@ -26,8 +30,13 @@ initTheme();
 const root = document.getElementById('app');
 
 function route() {
-  const m = location.hash.match(/^#\/v\/([a-z0-9-]+)(\/trade|\/mission|\/requirements|\/report|\/compare|\/optimize)?/);
   window.scrollTo(0, 0);
+  const t = location.hash.match(/^#\/(orbit|pilot)(?:\/([a-z0-9-]+))?/);
+  if (t) {
+    document.title = `${t[1] === 'orbit' ? 'Orbit' : 'Pilot'} · Pteronautics Works`;
+    return (t[1] === 'orbit' ? renderOrbit : renderPilot)(root, { vehicle: t[2] });
+  }
+  const m = location.hash.match(/^#\/v\/([a-z0-9-]+)(\/trade|\/mission|\/requirements|\/report|\/compare|\/optimize)?/);
   const lib = location.hash.match(/^#\/library(?:\/([a-z]+))?(?:\?v=([a-z0-9-]+))?/);
   if (lib) { document.title = 'Libraries · Pteronautics Works'; return renderLibrary(root, lib[1], lib[2]); }
   if (!m) { document.title = 'Pteronautics Works'; return renderHangar(root); }

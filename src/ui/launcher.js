@@ -31,7 +31,8 @@ export function renderLauncher(root, doc) {
   const isSeed = seeds().some(v => v.id === doc.id);
   root.replaceChildren(h('div', { class: 'ws' },
     h('header', { class: 'topbar' }, brand({ compact: true }), h('span', { class: 'vsep' }),
-      h('div', { class: 'row', style: { gap: '4px' } }, h('a', { class: 'vtab', href: '#/' }, icon('back'), 'Hangar'), h('span', { class: 'vtab on' }, h('span', { class: 'dot' }), doc.name)),
+      h('div', { class: 'row', style: { gap: '4px' } }, h('a', { class: 'vtab', href: '#/' }, icon('back'), 'Hangar'), h('span', { class: 'vtab on' }, h('span', { class: 'dot' }), doc.name),
+        h('span', { class: 'vsep' }), h('a', { class: 'vtab', href: '#/orbit/' + doc.id, title: `Size ${doc.name}'s payload to orbit in the Orbit tab` }, icon('orbit'), 'Orbit')),
       h('span', { class: 'grow' }), rev,
       h('a', { class: 'btn small', href: `#/v/${doc.id}/trade` }, icon('bars'), 'Trade study'),
       h('a', { class: 'btn small', href: `#/v/${doc.id}/optimize` }, icon('bars'), 'Optimise'),

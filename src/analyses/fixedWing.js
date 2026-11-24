@@ -161,6 +161,8 @@ export function fixedWingNodes({ airfoil = null } = {}) {
           sp: L.sp, ph: L.ph, dr: Lt.dr, roll: Lt.roll, spiral: Lt.spiral, hq: r.hq,
           spZeta: L.sp.real ? NaN : L.sp.zeta, drZeta: Lt.dr ? Lt.dr.zeta : NaN,
           roots: { lon: L.roots, lat: Lt.roots }, VH: d.VH, VV: d.VV, deriv: d,
+          // for Pilot: the solver id the aircraft is registered under, and the full analysis (state matrices)
+          solverId: id, an: r, z: atm.z, dT: atm.dT, mass: m.total, cg: m.h,
         };
       },
     },
